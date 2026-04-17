@@ -23,12 +23,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wiyklabs/expo-video-encoder.git"
+    "url": "https://github.com/ajibadedapo/expo-video-encoder.git"
   },
   "bugs": {
-    "url": "https://github.com/wiyklabs/expo-video-encoder/issues"
+    "url": "https://github.com/ajibadedapo/expo-video-encoder/issues"
   },
-  "homepage": "https://github.com/wiyklabs/expo-video-encoder#readme",
+  "homepage": "https://github.com/ajibadedapo/expo-video-encoder#readme",
   "peerDependencies": {
     "expo": ">=51.0.0",
     "react-native": ">=0.74.0"

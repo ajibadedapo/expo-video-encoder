@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.homepage       = package['homepage']
   s.authors        = { 'AJIBADE HAMMED ADEDAPO' => 'ajibadehammed@gmail.com' }
   s.platform       = :ios, '13.4'
-  s.source         = { :git => package.dig('repository', 'url'), :tag => "v#{package['version']}" }
+  s.source         = { :git => 'https://github.com/ajibadedapo/expo-video-encoder.git', :tag => "v#{package['version']}" }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
