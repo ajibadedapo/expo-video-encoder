@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "CommonJS",
+    "lib": ["ES2018"],
+    "outDir": "build",
+    "declaration": true,
+    "strict": true,
+    "moduleResolution": "node",
+    "skipLibCheck": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "build"]
+}

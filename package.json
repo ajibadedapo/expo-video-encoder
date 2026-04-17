@@ -1,0 +1,41 @@
+{
+  "name": "expo-video-encoder",
+  "version": "1.0.0",
+  "description": "AVFoundation-based H.264 video encoder for Expo / React Native — zero external dependencies, iOS only.",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc"
+  },
+  "keywords": [
+    "expo",
+    "react-native",
+    "video",
+    "encoder",
+    "h264",
+    "mp4",
+    "avfoundation",
+    "ios",
+    "frames"
+  ],
+  "author": "AJIBADE HAMMED ADEDAPO <ajibadehammed@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wiyklabs/expo-video-encoder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wiyklabs/expo-video-encoder/issues"
+  },
+  "homepage": "https://github.com/wiyklabs/expo-video-encoder#readme",
+  "peerDependencies": {
+    "expo": ">=51.0.0",
+    "react-native": ">=0.74.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.45",
+    "expo-modules-core": "^1.12.0",
+    "typescript": "~5.3.3"
+  }
+}
