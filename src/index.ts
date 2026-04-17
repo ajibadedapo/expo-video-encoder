@@ -76,7 +76,7 @@ function getNative() {
  */
 export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean> {
   if (Platform.OS !== 'ios') unsupported('encodeVideo');
-  return getNative().encodeVideo(options);
+  return getNative()!.encodeVideo(options);
 }
 
 /**
@@ -92,5 +92,5 @@ export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean>
  */
 export async function mixAudio(options: MixAudioOptions): Promise<boolean> {
   if (Platform.OS !== 'ios') unsupported('mixAudio');
-  return getNative().mixAudio(options);
+  return getNative()!.mixAudio(options);
 }
