@@ -6,6 +6,8 @@
 [![platform](https://img.shields.io/badge/platform-iOS-lightgrey.svg)](https://developer.apple.com/avfoundation/)
 [![expo](https://img.shields.io/badge/expo-%3E%3D51-blue.svg)](https://expo.dev)
 
+NPM registry: [expo-video-encoder](https://www.npmjs.com/package/expo-video-encoder)
+
 > Encode a sequence of JPEG frames into an H.264 MP4 — natively on iOS using AVFoundation. Zero external dependencies. No binaries to download. No servers.
 
 ---
