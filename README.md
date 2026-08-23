@@ -8,7 +8,7 @@
 
 NPM registry: [expo-video-encoder](https://www.npmjs.com/package/expo-video-encoder)
 
-> Encode a sequence of JPEG frames into an H.264 MP4 — natively on iOS using AVFoundation. Zero external dependencies. No binaries to download. No servers.
+> Encode a sequence of JPEG frames into an H.264 MP4, natively on iOS using AVFoundation. Zero external dependencies. No binaries to download. No servers.
 
 ---
 
@@ -24,7 +24,7 @@ The alternatives people try:
 | Server-side encoding | Requires internet. Privacy risk. Adds latency. |
 | FFmpeg WASM | Doesn't run on Hermes (React Native's JS engine). |
 | Other RN packages | All depend on the same dead arthenica binaries. |
-| Writing AVFoundation yourself | This is that — already written for you. |
+| Writing AVFoundation yourself | This is that, already written for you. |
 
 Apple ships a fully capable video encoder in every iPhone and iPad called **AVFoundation**. It handles H.264 encoding in hardware, supports audio mixing, and has been stable since iOS 4. This package exposes it to React Native through a lean Expo native module.
 
@@ -32,14 +32,14 @@ Apple ships a fully capable video encoder in every iPhone and iPad called **AVFo
 
 ## Features
 
-- **H.264 MP4 encoding** — industry-standard format, plays everywhere
-- **Frame-by-frame assembly** — snapshot your canvas, Skia surface, or any pixel source
-- **Audio mixing** — layer multiple audio tracks with independent start times and volumes
-- **Hardware accelerated** — AVFoundation uses the device's video encoder chip
-- **Zero external dependencies** — no CocoaPods binary downloads, no xcframework, no surprises
-- **Expo autolinking** — install and it works, no manual native setup
-- **iOS 13.4+** — covers virtually all devices in the wild today
-- **TypeScript first** — full type definitions included
+- **H.264 MP4 encoding:** industry-standard format, plays everywhere
+- **Frame-by-frame assembly:** snapshot your canvas, Skia surface, or any pixel source
+- **Audio mixing:** layer multiple audio tracks with independent start times and volumes
+- **Hardware accelerated:** AVFoundation uses the device's video encoder chip
+- **Zero external dependencies:** no CocoaPods binary downloads, no xcframework, no surprises
+- **Expo autolinking:** install and it works, no manual native setup
+- **iOS 13.4+:** covers virtually all devices in the wild today
+- **TypeScript first:** full type definitions included
 
 ---
 
@@ -100,7 +100,7 @@ JPEG is the most practical format for frame transfer between JavaScript and nati
 - `@shopify/react-native-skia` and most canvas libraries can snapshot to JPEG base64
 - `expo-file-system` can write base64 to disk in one call
 - JPEG decode on iOS is hardware-accelerated
-- Raw pixel arrays (RGBA) would be 4–10× larger to transfer across the JS bridge
+- Raw pixel arrays (RGBA) would be 4 to 10x larger to transfer across the JS bridge
 
 ---
 
@@ -120,7 +120,7 @@ npx expo prebuild
 
 No `app.json` plugin is needed. Expo's autolinking detects the `expo-module.config.json` and wires up the native module automatically.
 
-> **Note:** This module has no effect on Android — it throws a clear error if called on a non-iOS platform. Use a `Platform.OS === 'ios'` guard in your code.
+> **Note:** This module has no effect on Android. It throws a clear error if called on a non-iOS platform. Use a `Platform.OS === 'ios'` guard in your code.
 
 ---
 
@@ -229,7 +229,7 @@ Assembles a directory of JPEG frames into an H.264 MP4 file.
 | `height` | `number` | ✅ | Output height in pixels. |
 | `outputPath` | `string` | ✅ | Absolute filesystem path for the resulting `.mp4`. Must not have a `file://` prefix. |
 
-**Returns:** `Promise<boolean>` — resolves `true` on success, throws on failure.
+**Returns:** `Promise<boolean>`, resolves `true` on success, throws on failure.
 
 **Frame naming:** Frames must be zero-padded to 6 digits: `frame_000000.jpg`, `frame_000001.jpg`, etc. Gaps in the sequence are skipped silently (useful if some frames fail to capture).
 
@@ -246,7 +246,7 @@ Mixes one or more audio tracks onto an existing silent MP4.
 | `outputPath` | `string` | ✅ | Absolute path for the mixed output MP4. No `file://` prefix. |
 | `totalDurationMs` | `number` | ✅ | Total video duration in milliseconds. Used to set the export time range. |
 
-**Returns:** `Promise<boolean>` — resolves `true` on success, throws on failure. Treat failure as non-fatal — fall back to the silent video.
+**Returns:** `Promise<boolean>`, resolves `true` on success, throws on failure. Treat failure as non-fatal, fall back to the silent video.
 
 #### `AudioTrack`
 
@@ -341,7 +341,7 @@ export async function runExport(options: ExportOptions): Promise<string | null> 
       });
       finalPath = mixedMp4;
     } catch {
-      // audio mix failed — continue with silent video
+      // audio mix failed, continue with silent video
     }
     onProgress('Mixing audio', 1);
   }
@@ -385,11 +385,11 @@ This is the most common source of "file not found" errors.
 
 ## Performance tips
 
-**Use the device's resolution — not higher.** Encoding at 4K on a device with a 2K screen wastes time and produces imperceptibly better output. Match your canvas size.
+**Use the device's resolution, not higher.** Encoding at 4K on a device with a 2K screen wastes time and produces imperceptibly better output. Match your canvas size.
 
 **Keep frames on disk, not in memory.** The JPEG → disk → native pipeline is intentional. Passing large base64 strings through the JS bridge for every frame would be slower and more memory-intensive.
 
-**Audio mixing is a second pass.** `mixAudio` reads the silent MP4 and the audio files, mixes them, and writes a new file. Keep `totalDurationMs` accurate — if it's longer than the video, the export session will pad with silence.
+**Audio mixing is a second pass.** `mixAudio` reads the silent MP4 and the audio files, mixes them, and writes a new file. Keep `totalDurationMs` accurate. If it is longer than the video, the export session will pad with silence.
 
 **Frame capture is usually the bottleneck.** The encoding step is hardware-accelerated and fast. The slow part is typically your canvas render + snapshot loop. Optimize there first.
 
@@ -419,11 +419,11 @@ This is the most common source of "file not found" errors.
 
 ## Roadmap
 
-- [ ] **Android support** via `MediaCodec` — same concept, Android's native H.264 encoder
-- [ ] **Progress callbacks** — per-frame encode progress from native → JS
-- [ ] **Quality presets** — CRF control for file size vs. quality tradeoff
-- [ ] **HEVC / H.265** — smaller files at the same quality on iOS 11+
-- [ ] **Frame timestamp control** — variable frame rate support
+- [ ] **Android support** via `MediaCodec`, using Android's native H.264 encoder
+- [ ] **Progress callbacks:** per-frame encode progress from native to JS
+- [ ] **Quality presets:** CRF control for file size vs. quality tradeoff
+- [ ] **HEVC / H.265:** smaller files at the same quality on iOS 11+
+- [ ] **Frame timestamp control:** variable frame rate support
 
 Want to contribute? Android support via `MediaCodec` would be the highest-impact next step. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
