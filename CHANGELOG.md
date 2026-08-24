@@ -11,6 +11,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.4] - 2026-08-24
+
+### Added
+- Added GitHub Actions build and package-content verification so every pushed change proves TypeScript output and npm tarball contents before release.
+- Added an npm `package:check` script for the same local package-content verification used by CI.
+
+---
+
 ## [1.0.3] - 2026-08-24
 
 ### Changed
