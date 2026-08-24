@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.3] - 2026-08-24
+
+### Changed
+- Added an explicit npm package file whitelist so published tarballs only include the JavaScript build, TypeScript source, iOS native module, Expo module config, podspec, and project metadata.
+
+---
+
 ## [1.0.2] - 2026-08-23
 
 ### Fixed
