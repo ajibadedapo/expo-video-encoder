@@ -11,6 +11,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.5] - 2026-08-25
+
+### Fixed
+- Added a release verifier that blocks stale package-lock versions and missing npm tarball contents before publish.
+- Switched CI to the same package check used locally, so GitHub and npm release proof cover the same gate.
+
+---
+
 ## [1.0.4] - 2026-08-24
 
 ### Added
