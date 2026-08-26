@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.7] - 2026-08-26
+
+### Fixed
+- Reject non-MP4 video paths and audio tracks that extend beyond the requested export duration before native AVFoundation work starts.
+
+---
+
 ## [1.0.6] - 2026-08-26
 
 ### Added

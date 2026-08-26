@@ -1,6 +1,7 @@
 import type { AudioTrack, EncodeVideoOptions, MixAudioOptions } from './index';
 
 const fileSchemePattern = /^file:\/\//i;
+const mp4PathPattern = /\.mp4$/i;
 
 function assertFiniteNumber(value: unknown, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -38,7 +39,14 @@ function assertNativePath(value: unknown, name: string): asserts value is string
   }
 }
 
-function assertAudioTrack(track: AudioTrack, index: number) {
+function assertMp4Path(value: unknown, name: string): asserts value is string {
+  assertNativePath(value, name);
+  if (!mp4PathPattern.test(value.trim())) {
+    throw new Error(`expo-video-encoder: ${name} must end with .mp4.`);
+  }
+}
+
+function assertAudioTrack(track: AudioTrack, index: number, totalDurationMs: number) {
   if (!track || typeof track !== 'object') {
     throw new Error(`expo-video-encoder: audioTracks[${index}] must be an object.`);
   }
@@ -51,6 +59,9 @@ function assertAudioTrack(track: AudioTrack, index: number) {
   if (track.volume < 0 || track.volume > 1) {
     throw new Error(`expo-video-encoder: audioTracks[${index}].volume must be between 0 and 1.`);
   }
+  if (track.startMs + track.durationMs > totalDurationMs) {
+    throw new Error(`expo-video-encoder: audioTracks[${index}] must fit within totalDurationMs.`);
+  }
 }
 
 export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
@@ -62,18 +73,18 @@ export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   assertPositiveNumber(options.fps, 'fps');
   assertPositiveInteger(options.width, 'width');
   assertPositiveInteger(options.height, 'height');
-  assertNativePath(options.outputPath, 'outputPath');
+  assertMp4Path(options.outputPath, 'outputPath');
 }
 
 export function assertMixAudioOptions(options: MixAudioOptions) {
   if (!options || typeof options !== 'object') {
     throw new Error('expo-video-encoder: mixAudio options must be an object.');
   }
-  assertNativePath(options.videoPath, 'videoPath');
-  assertNativePath(options.outputPath, 'outputPath');
+  assertMp4Path(options.videoPath, 'videoPath');
+  assertMp4Path(options.outputPath, 'outputPath');
   assertPositiveNumber(options.totalDurationMs, 'totalDurationMs');
   if (!Array.isArray(options.audioTracks) || options.audioTracks.length === 0) {
     throw new Error('expo-video-encoder: audioTracks must contain at least one track.');
   }
-  options.audioTracks.forEach(assertAudioTrack);
+  options.audioTracks.forEach((track, index) => assertAudioTrack(track, index, options.totalDurationMs));
 }
