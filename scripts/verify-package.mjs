@@ -22,6 +22,8 @@ if (pack.status !== 0) {
   const required = [
     "build/index.d.ts",
     "build/index.js",
+    "build/validation.d.ts",
+    "build/validation.js",
     "CHANGELOG.md",
     "ExpoVideoEncoder.podspec",
     "expo-module.config.json",
@@ -30,6 +32,7 @@ if (pack.status !== 0) {
     "package.json",
     "README.md",
     "src/index.ts",
+    "src/validation.ts",
   ];
   for (const file of required) {
     if (!files.has(file)) failures.push(`npm tarball is missing ${file}`);

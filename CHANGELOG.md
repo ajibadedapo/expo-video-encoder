@@ -11,6 +11,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.6] - 2026-08-26
+
+### Added
+- Added JavaScript-side option validation for frame encoding and audio mixing, so invalid paths, dimensions, frame counts, fps values, track timing, and volume fail before native AVFoundation work starts.
+- Added package tests for the validation boundary and folded them into `npm run package:check`.
+
+---
+
 ## [1.0.5] - 2026-08-25
 
 ### Fixed

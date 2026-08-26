@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
+import { assertEncodeVideoOptions, assertMixAudioOptions } from './validation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ export type AudioTrack = {
   startMs: number;
   /** Duration in milliseconds to use from this audio clip. */
   durationMs: number;
-  /** Volume multiplier — 0.0 (silent) to 1.0 (full). */
+  /** Volume multiplier: 0.0 (silent) to 1.0 (full). */
   volume: number;
 };
 
@@ -45,7 +46,7 @@ export type MixAudioOptions = {
   audioTracks: AudioTrack[];
   /** Absolute filesystem path for the resulting mixed .mp4 file. */
   outputPath: string;
-  /** Total video duration in milliseconds — used to set the export time range. */
+  /** Total video duration in milliseconds, used to set the export time range. */
   totalDurationMs: number;
 };
 
@@ -76,6 +77,7 @@ function getNative() {
  */
 export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean> {
   if (Platform.OS !== 'ios') unsupported('encodeVideo');
+  assertEncodeVideoOptions(options);
   return getNative()!.encodeVideo(options);
 }
 
@@ -83,7 +85,7 @@ export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean>
  * Mixes one or more audio tracks onto an existing silent MP4 using
  * AVMutableComposition + AVAssetExportSession.
  *
- * Audio mix failures should be treated as non-fatal — callers can fall back
+ * Audio mix failures should be treated as non-fatal, callers can fall back
  * to the silent video if this throws.
  *
  * @returns `true` on success, throws on failure.
@@ -92,5 +94,6 @@ export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean>
  */
 export async function mixAudio(options: MixAudioOptions): Promise<boolean> {
   if (Platform.OS !== 'ios') unsupported('mixAudio');
+  assertMixAudioOptions(options);
   return getNative()!.mixAudio(options);
 }

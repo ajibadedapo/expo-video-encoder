@@ -1,6 +1,6 @@
 {
   "name": "expo-video-encoder",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "AVFoundation-based H.264 video encoder for Expo / React Native, zero external dependencies, iOS only.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -16,7 +16,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "package:check": "npm run build && node scripts/verify-package.mjs",
+    "test": "node --test test/*.test.mjs",
+    "package:check": "npm run build && npm test && node scripts/verify-package.mjs",
     "prepare": "tsc"
   },
   "keywords": [
