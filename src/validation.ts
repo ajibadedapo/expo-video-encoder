@@ -62,6 +62,24 @@ function assertAudioTrack(track: AudioTrack, index: number, totalDurationMs: num
   }
 }
 
+function assertAudioTracksDoNotOverlap(tracks: AudioTrack[]) {
+  const windows = tracks
+    .map((track, index) => ({
+      index,
+      startMs: track.startMs,
+      endMs: track.startMs + track.durationMs,
+    }))
+    .sort((left, right) => left.startMs - right.startMs);
+
+  for (let index = 1; index < windows.length; index += 1) {
+    const previous = windows[index - 1];
+    const current = windows[index];
+    if (current.startMs < previous.endMs) {
+      throw new Error(`expo-video-encoder: audioTracks[${current.index}] must not overlap audioTracks[${previous.index}].`);
+    }
+  }
+}
+
 function assertDifferentPaths(left: string, right: string, leftName: string, rightName: string) {
   if (left.trim() === right.trim()) {
     throw new Error(`expo-video-encoder: ${leftName} must be different from ${rightName}.`);
@@ -92,4 +110,5 @@ export function assertMixAudioOptions(options: MixAudioOptions) {
     throw new Error('expo-video-encoder: audioTracks must contain at least one track.');
   }
   options.audioTracks.forEach((track, index) => assertAudioTrack(track, index, options.totalDurationMs));
+  assertAudioTracksDoNotOverlap(options.audioTracks);
 }
