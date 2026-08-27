@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.9] - 2026-08-27
+
+### Fixed
+- Reject `mixAudio` audio track URIs with `file://` prefixes before native audio composition starts.
+
+---
+
 ## [1.0.8] - 2026-08-27
 
 ### Fixed

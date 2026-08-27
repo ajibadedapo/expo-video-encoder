@@ -50,9 +50,7 @@ function assertAudioTrack(track: AudioTrack, index: number, totalDurationMs: num
   if (!track || typeof track !== 'object') {
     throw new Error(`expo-video-encoder: audioTracks[${index}] must be an object.`);
   }
-  if (typeof track.uri !== 'string' || track.uri.trim().length === 0) {
-    throw new Error(`expo-video-encoder: audioTracks[${index}].uri must be a non-empty string.`);
-  }
+  assertNativePath(track.uri, `audioTracks[${index}].uri`);
   assertNonNegativeNumber(track.startMs, `audioTracks[${index}].startMs`);
   assertPositiveNumber(track.durationMs, `audioTracks[${index}].durationMs`);
   assertFiniteNumber(track.volume, `audioTracks[${index}].volume`);
