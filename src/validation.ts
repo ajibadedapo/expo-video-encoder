@@ -64,6 +64,12 @@ function assertAudioTrack(track: AudioTrack, index: number, totalDurationMs: num
   }
 }
 
+function assertDifferentPaths(left: string, right: string, leftName: string, rightName: string) {
+  if (left.trim() === right.trim()) {
+    throw new Error(`expo-video-encoder: ${leftName} must be different from ${rightName}.`);
+  }
+}
+
 export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   if (!options || typeof options !== 'object') {
     throw new Error('expo-video-encoder: encodeVideo options must be an object.');
@@ -82,6 +88,7 @@ export function assertMixAudioOptions(options: MixAudioOptions) {
   }
   assertMp4Path(options.videoPath, 'videoPath');
   assertMp4Path(options.outputPath, 'outputPath');
+  assertDifferentPaths(options.outputPath, options.videoPath, 'outputPath', 'videoPath');
   assertPositiveNumber(options.totalDurationMs, 'totalDurationMs');
   if (!Array.isArray(options.audioTracks) || options.audioTracks.length === 0) {
     throw new Error('expo-video-encoder: audioTracks must contain at least one track.');

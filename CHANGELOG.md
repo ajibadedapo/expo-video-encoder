@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.8] - 2026-08-27
+
+### Fixed
+- Reject `mixAudio` calls that use the same source video path and output path before native export can remove the input file.
+
+---
+
 ## [1.0.7] - 2026-08-26
 
 ### Fixed
