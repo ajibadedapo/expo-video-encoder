@@ -80,6 +80,18 @@ function assertAudioTracksDoNotOverlap(tracks: AudioTrack[]) {
   }
 }
 
+function assertAudioTracksUseDifferentInputs(tracks: AudioTrack[]) {
+  const seen = new Map<string, number>();
+  tracks.forEach((track, index) => {
+    const uri = track.uri.trim();
+    const previous = seen.get(uri);
+    if (typeof previous === 'number') {
+      throw new Error(`expo-video-encoder: audioTracks[${index}].uri must be different from audioTracks[${previous}].uri.`);
+    }
+    seen.set(uri, index);
+  });
+}
+
 function assertDifferentPaths(left: string, right: string, leftName: string, rightName: string) {
   if (left.trim() === right.trim()) {
     throw new Error(`expo-video-encoder: ${leftName} must be different from ${rightName}.`);
@@ -110,5 +122,6 @@ export function assertMixAudioOptions(options: MixAudioOptions) {
     throw new Error('expo-video-encoder: audioTracks must contain at least one track.');
   }
   options.audioTracks.forEach((track, index) => assertAudioTrack(track, index, options.totalDurationMs));
+  assertAudioTracksUseDifferentInputs(options.audioTracks);
   assertAudioTracksDoNotOverlap(options.audioTracks);
 }

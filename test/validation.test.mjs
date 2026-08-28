@@ -141,4 +141,24 @@ test('rejects unsafe mix audio options before native work', () => {
       },
     ],
   }), /must not overlap/);
+
+  assert.throws(() => assertMixAudioOptions({
+    videoPath: '/tmp/video.mp4',
+    outputPath: '/tmp/mixed.mp4',
+    totalDurationMs: 4000,
+    audioTracks: [
+      {
+        uri: '/tmp/voiceover.m4a',
+        startMs: 0,
+        durationMs: 1000,
+        volume: 0.8,
+      },
+      {
+        uri: '/tmp/voiceover.m4a',
+        startMs: 2000,
+        durationMs: 1000,
+        volume: 0.4,
+      },
+    ],
+  }), /audioTracks\[1\]\.uri must be different/);
 });
