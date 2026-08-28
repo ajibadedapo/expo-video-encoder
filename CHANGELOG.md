@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.12] - 2026-08-29
+
+### Fixed
+- Reject `mixAudio` audio track inputs that do not end with a supported audio-file extension before native composition starts.
+
+---
+
 ## [1.0.11] - 2026-08-28
 
 ### Fixed

@@ -2,6 +2,7 @@ import type { AudioTrack, EncodeVideoOptions, MixAudioOptions } from './index';
 
 const fileSchemePattern = /^file:\/\//i;
 const mp4PathPattern = /\.mp4$/i;
+const audioPathPattern = /\.(aac|caf|m4a|mp3|wav)$/i;
 
 function assertFiniteNumber(value: unknown, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -51,6 +52,9 @@ function assertAudioTrack(track: AudioTrack, index: number, totalDurationMs: num
     throw new Error(`expo-video-encoder: audioTracks[${index}] must be an object.`);
   }
   assertNativePath(track.uri, `audioTracks[${index}].uri`);
+  if (!audioPathPattern.test(track.uri.trim())) {
+    throw new Error(`expo-video-encoder: audioTracks[${index}].uri must end with a supported audio extension.`);
+  }
   assertNonNegativeNumber(track.startMs, `audioTracks[${index}].startMs`);
   assertPositiveNumber(track.durationMs, `audioTracks[${index}].durationMs`);
   assertFiniteNumber(track.volume, `audioTracks[${index}].volume`);
