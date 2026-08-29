@@ -35,6 +35,9 @@ function assertNativePath(value: unknown, name: string): asserts value is string
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`expo-video-encoder: ${name} must be a non-empty path string.`);
   }
+  if (value !== value.trim()) {
+    throw new Error(`expo-video-encoder: ${name} must not include leading or trailing whitespace.`);
+  }
   if (fileSchemePattern.test(value)) {
     throw new Error(`expo-video-encoder: ${name} must not include a file:// prefix.`);
   }

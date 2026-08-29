@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.13] - 2026-08-29
+
+### Fixed
+- Reject native file paths with leading or trailing whitespace before iOS encoding or audio mixing starts.
+
+---
+
 ## [1.0.12] - 2026-08-29
 
 ### Fixed

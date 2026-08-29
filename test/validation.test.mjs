@@ -40,6 +40,15 @@ test('rejects unsafe encode options before native work', () => {
     height: 1080,
     outputPath: '/tmp/out.mov',
   }), /outputPath must end with \.mp4/);
+
+  assert.throws(() => assertEncodeVideoOptions({
+    framesDir: '/tmp/frames ',
+    frameCount: 30,
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    outputPath: '/tmp/out.mp4',
+  }), /framesDir must not include leading or trailing whitespace/);
 });
 
 test('accepts valid mix audio options', () => {
@@ -175,4 +184,18 @@ test('rejects unsafe mix audio options before native work', () => {
       },
     ],
   }), /supported audio extension/);
+
+  assert.throws(() => assertMixAudioOptions({
+    videoPath: '/tmp/video.mp4 ',
+    outputPath: '/tmp/mixed.mp4',
+    totalDurationMs: 4000,
+    audioTracks: [
+      {
+        uri: '/tmp/audio.m4a',
+        startMs: 0,
+        durationMs: 1000,
+        volume: 0.8,
+      },
+    ],
+  }), /videoPath must not include leading or trailing whitespace/);
 });
