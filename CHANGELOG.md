@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.14] - 2026-08-30
+
+### Fixed
+- Fail native frame encoding when no readable frame can be appended, instead of exporting an empty-looking success.
+
+---
+
 ## [1.0.13] - 2026-08-29
 
 ### Fixed

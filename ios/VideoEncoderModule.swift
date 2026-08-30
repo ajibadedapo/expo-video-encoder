@@ -114,6 +114,8 @@ public class VideoEncoderModule: Module {
 
     let frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
 
+    var appendedFrames = 0
+
     for i in 0..<frameCount {
       let frameName = String(format: "frame_%06d.jpg", i)
       let framePath = (framesDir as NSString).appendingPathComponent(frameName)
@@ -126,7 +128,21 @@ public class VideoEncoderModule: Module {
       while !input.isReadyForMoreMediaData { Thread.sleep(forTimeInterval: 0.005) }
 
       let pts = CMTimeMultiply(frameDuration, multiplier: Int32(i))
-      adaptor.append(buffer, withPresentationTime: pts)
+      if adaptor.append(buffer, withPresentationTime: pts) {
+        appendedFrames += 1
+      } else {
+        writer.cancelWriting()
+        throw NSError(domain: "VideoEncoder", code: 2, userInfo: [
+          NSLocalizedDescriptionKey: "Failed to append frame \(i)"
+        ])
+      }
+    }
+
+    guard appendedFrames > 0 else {
+      writer.cancelWriting()
+      throw NSError(domain: "VideoEncoder", code: 3, userInfo: [
+        NSLocalizedDescriptionKey: "No readable frame files were found"
+      ])
     }
 
     input.markAsFinished()
