@@ -227,11 +227,11 @@ Assembles a directory of JPEG frames into an H.264 MP4 file.
 | `fps` | `number` | ✅ | Output frame rate. Common values: `24`, `30`, `60`. |
 | `width` | `number` | ✅ | Output width in pixels. |
 | `height` | `number` | ✅ | Output height in pixels. |
-| `outputPath` | `string` | ✅ | Absolute filesystem path for the resulting `.mp4`. Must not have a `file://` prefix. |
+| `outputPath` | `string` | ✅ | Absolute filesystem path for the resulting `.mp4`. Must not have a `file://` prefix and must be outside `framesDir`. |
 
 **Returns:** `Promise<boolean>`, resolves `true` on success, throws on failure.
 
-**Frame naming:** Frames must be zero-padded to 6 digits: `frame_000000.jpg`, `frame_000001.jpg`, etc. Gaps in the sequence are skipped silently (useful if some frames fail to capture).
+**Frame naming:** Frames must be zero-padded to 6 digits: `frame_000000.jpg`, `frame_000001.jpg`, etc. Gaps in the sequence are skipped, but at least one readable frame must be appended before export can succeed.
 
 ---
 

@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.15] - 2026-08-30
+
+### Fixed
+- Reject frame encoding outputs that are placed inside the frame input directory before native work starts.
+
+---
+
 ## [1.0.14] - 2026-08-30
 
 ### Fixed

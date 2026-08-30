@@ -49,6 +49,15 @@ test('rejects unsafe encode options before native work', () => {
     height: 1080,
     outputPath: '/tmp/out.mp4',
   }), /framesDir must not include leading or trailing whitespace/);
+
+  assert.throws(() => assertEncodeVideoOptions({
+    framesDir: '/tmp/frames/',
+    frameCount: 30,
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    outputPath: '/tmp/frames/output.mp4',
+  }), /outputPath must be outside framesDir/);
 });
 
 test('accepts valid mix audio options', () => {

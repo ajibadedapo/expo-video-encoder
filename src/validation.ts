@@ -4,6 +4,10 @@ const fileSchemePattern = /^file:\/\//i;
 const mp4PathPattern = /\.mp4$/i;
 const audioPathPattern = /\.(aac|caf|m4a|mp3|wav)$/i;
 
+function normalizeNativePath(value: string) {
+  return value.replace(/\/+$/g, '');
+}
+
 function assertFiniteNumber(value: unknown, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`expo-video-encoder: ${name} must be a finite number.`);
@@ -105,6 +109,14 @@ function assertDifferentPaths(left: string, right: string, leftName: string, rig
   }
 }
 
+function assertOutputOutsideFramesDir(framesDir: string, outputPath: string) {
+  const dir = normalizeNativePath(framesDir.trim());
+  const output = outputPath.trim();
+  if (output === dir || output.startsWith(`${dir}/`)) {
+    throw new Error('expo-video-encoder: outputPath must be outside framesDir.');
+  }
+}
+
 export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   if (!options || typeof options !== 'object') {
     throw new Error('expo-video-encoder: encodeVideo options must be an object.');
@@ -115,6 +127,7 @@ export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   assertPositiveInteger(options.width, 'width');
   assertPositiveInteger(options.height, 'height');
   assertMp4Path(options.outputPath, 'outputPath');
+  assertOutputOutsideFramesDir(options.framesDir, options.outputPath);
 }
 
 export function assertMixAudioOptions(options: MixAudioOptions) {
