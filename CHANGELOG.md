@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.16] - 2026-08-30
+
+### Fixed
+- Reject odd video dimensions before H.264 frame encoding starts, so callers see a clear JavaScript error instead of a native export failure.
+
+---
+
 ## [1.0.15] - 2026-08-30
 
 ### Fixed

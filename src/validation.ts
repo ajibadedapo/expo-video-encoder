@@ -21,6 +21,13 @@ function assertPositiveInteger(value: unknown, name: string): asserts value is n
   }
 }
 
+function assertEvenPositiveInteger(value: unknown, name: string): asserts value is number {
+  assertPositiveInteger(value, name);
+  if (value % 2 !== 0) {
+    throw new Error(`expo-video-encoder: ${name} must be an even integer for H.264 encoding.`);
+  }
+}
+
 function assertPositiveNumber(value: unknown, name: string): asserts value is number {
   assertFiniteNumber(value, name);
   if (value <= 0) {
@@ -124,8 +131,8 @@ export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   assertNativePath(options.framesDir, 'framesDir');
   assertPositiveInteger(options.frameCount, 'frameCount');
   assertPositiveNumber(options.fps, 'fps');
-  assertPositiveInteger(options.width, 'width');
-  assertPositiveInteger(options.height, 'height');
+  assertEvenPositiveInteger(options.width, 'width');
+  assertEvenPositiveInteger(options.height, 'height');
   assertMp4Path(options.outputPath, 'outputPath');
   assertOutputOutsideFramesDir(options.framesDir, options.outputPath);
 }
