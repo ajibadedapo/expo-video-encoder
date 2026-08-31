@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.17] - 2026-08-31
+
+### Fixed
+- Reject frame encoding above 240 fps before native work starts, so accidental extreme frame rates fail with a clear JavaScript error.
+
+---
+
 ## [1.0.16] - 2026-08-30
 
 ### Fixed

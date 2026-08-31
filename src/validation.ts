@@ -35,6 +35,13 @@ function assertPositiveNumber(value: unknown, name: string): asserts value is nu
   }
 }
 
+function assertFps(value: unknown): asserts value is number {
+  assertPositiveNumber(value, 'fps');
+  if (value > 240) {
+    throw new Error('expo-video-encoder: fps must be 240 or less.');
+  }
+}
+
 function assertNonNegativeNumber(value: unknown, name: string): asserts value is number {
   assertFiniteNumber(value, name);
   if (value < 0) {
@@ -130,7 +137,7 @@ export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   }
   assertNativePath(options.framesDir, 'framesDir');
   assertPositiveInteger(options.frameCount, 'frameCount');
-  assertPositiveNumber(options.fps, 'fps');
+  assertFps(options.fps);
   assertEvenPositiveInteger(options.width, 'width');
   assertEvenPositiveInteger(options.height, 'height');
   assertMp4Path(options.outputPath, 'outputPath');
