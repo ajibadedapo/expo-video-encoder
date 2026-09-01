@@ -3,6 +3,7 @@ import type { AudioTrack, EncodeVideoOptions, MixAudioOptions } from './index';
 const fileSchemePattern = /^file:\/\//i;
 const mp4PathPattern = /\.mp4$/i;
 const audioPathPattern = /\.(aac|caf|m4a|mp3|wav)$/i;
+const maxAudioTracks = 16;
 
 function normalizeNativePath(value: string) {
   return value.replace(/\/+$/g, '');
@@ -154,6 +155,9 @@ export function assertMixAudioOptions(options: MixAudioOptions) {
   assertPositiveNumber(options.totalDurationMs, 'totalDurationMs');
   if (!Array.isArray(options.audioTracks) || options.audioTracks.length === 0) {
     throw new Error('expo-video-encoder: audioTracks must contain at least one track.');
+  }
+  if (options.audioTracks.length > maxAudioTracks) {
+    throw new Error(`expo-video-encoder: audioTracks must contain ${maxAudioTracks} tracks or fewer.`);
   }
   options.audioTracks.forEach((track, index) => assertAudioTrack(track, index, options.totalDurationMs));
   assertAudioTracksUseDifferentInputs(options.audioTracks);

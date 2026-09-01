@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.18] - 2026-08-31
+
+### Fixed
+- Reject `mixAudio` calls with more than 16 audio tracks before native AVFoundation work starts.
+
+---
+
 ## [1.0.17] - 2026-08-31
 
 ### Fixed
