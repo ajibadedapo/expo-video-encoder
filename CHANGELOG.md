@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.19] - 2026-09-01
+
+### Fixed
+- Reject `framesDir` values that point at a JPEG frame file before native encoding starts.
+
+---
+
 ## [1.0.18] - 2026-08-31
 
 ### Fixed

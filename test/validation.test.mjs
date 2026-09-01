@@ -60,6 +60,15 @@ test('rejects unsafe encode options before native work', () => {
   }), /outputPath must be outside framesDir/);
 
   assert.throws(() => assertEncodeVideoOptions({
+    framesDir: '/tmp/frames/frame_000001.jpg',
+    frameCount: 30,
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    outputPath: '/tmp/out.mp4',
+  }), /framesDir must point to a directory/);
+
+  assert.throws(() => assertEncodeVideoOptions({
     framesDir: '/tmp/frames',
     frameCount: 30,
     fps: 30,

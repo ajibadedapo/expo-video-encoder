@@ -3,6 +3,7 @@ import type { AudioTrack, EncodeVideoOptions, MixAudioOptions } from './index';
 const fileSchemePattern = /^file:\/\//i;
 const mp4PathPattern = /\.mp4$/i;
 const audioPathPattern = /\.(aac|caf|m4a|mp3|wav)$/i;
+const jpegPathPattern = /\.jpe?g$/i;
 const maxAudioTracks = 16;
 
 function normalizeNativePath(value: string) {
@@ -137,6 +138,9 @@ export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
     throw new Error('expo-video-encoder: encodeVideo options must be an object.');
   }
   assertNativePath(options.framesDir, 'framesDir');
+  if (jpegPathPattern.test(options.framesDir.trim())) {
+    throw new Error('expo-video-encoder: framesDir must point to a directory, not a JPEG frame file.');
+  }
   assertPositiveInteger(options.frameCount, 'frameCount');
   assertFps(options.fps);
   assertEvenPositiveInteger(options.width, 'width');
