@@ -255,4 +255,32 @@ test('rejects unsafe mix audio options before native work', () => {
       },
     ],
   }), /videoPath must not include leading or trailing whitespace/);
+
+  assert.throws(() => assertMixAudioOptions({
+    videoPath: '/tmp/video.mp4',
+    outputPath: '/tmp/mixed.mp4',
+    totalDurationMs: 4000,
+    audioTracks: [
+      {
+        uri: '/tmp/audio.m4a',
+        startMs: 0.5,
+        durationMs: 1000,
+        volume: 0.8,
+      },
+    ],
+  }), /audioTracks\[0\]\.startMs must be an integer number of milliseconds/);
+
+  assert.throws(() => assertMixAudioOptions({
+    videoPath: '/tmp/video.mp4',
+    outputPath: '/tmp/mixed.mp4',
+    totalDurationMs: 4000,
+    audioTracks: [
+      {
+        uri: '/tmp/audio.m4a',
+        startMs: 0,
+        durationMs: 1000.5,
+        volume: 0.8,
+      },
+    ],
+  }), /audioTracks\[0\]\.durationMs must be a positive integer/);
 });

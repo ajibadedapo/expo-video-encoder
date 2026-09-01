@@ -51,6 +51,13 @@ function assertNonNegativeNumber(value: unknown, name: string): asserts value is
   }
 }
 
+function assertNonNegativeInteger(value: unknown, name: string): asserts value is number {
+  assertNonNegativeNumber(value, name);
+  if (!Number.isInteger(value)) {
+    throw new Error(`expo-video-encoder: ${name} must be an integer number of milliseconds.`);
+  }
+}
+
 function assertNativePath(value: unknown, name: string): asserts value is string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`expo-video-encoder: ${name} must be a non-empty path string.`);
@@ -78,8 +85,8 @@ function assertAudioTrack(track: AudioTrack, index: number, totalDurationMs: num
   if (!audioPathPattern.test(track.uri.trim())) {
     throw new Error(`expo-video-encoder: audioTracks[${index}].uri must end with a supported audio extension.`);
   }
-  assertNonNegativeNumber(track.startMs, `audioTracks[${index}].startMs`);
-  assertPositiveNumber(track.durationMs, `audioTracks[${index}].durationMs`);
+  assertNonNegativeInteger(track.startMs, `audioTracks[${index}].startMs`);
+  assertPositiveInteger(track.durationMs, `audioTracks[${index}].durationMs`);
   assertFiniteNumber(track.volume, `audioTracks[${index}].volume`);
   if (track.volume < 0 || track.volume > 1) {
     throw new Error(`expo-video-encoder: audioTracks[${index}].volume must be between 0 and 1.`);

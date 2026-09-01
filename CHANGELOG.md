@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.20] - 2026-09-01
+
+### Fixed
+- Reject fractional `mixAudio` start and duration values before native composition starts.
+
+---
+
 ## [1.0.19] - 2026-09-01
 
 ### Fixed
