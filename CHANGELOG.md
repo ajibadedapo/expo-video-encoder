@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.23] - 2026-09-02
+
+### Fixed
+- Reject frame sequences whose `frameCount` and `fps` would encode more than one hour of video before native AVFoundation work starts.
+
+---
+
 ## [1.0.22] - 2026-09-02
 
 ### Fixed

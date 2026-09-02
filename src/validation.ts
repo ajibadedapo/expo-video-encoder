@@ -39,6 +39,12 @@ function assertH264Dimension(value: unknown, name: string): asserts value is num
   }
 }
 
+function assertEncodedVideoDuration(frameCount: number, fps: number) {
+  if ((frameCount / fps) * 1000 > maxTotalDurationMs) {
+    throw new Error('expo-video-encoder: frameCount and fps must produce a video of 3600000 milliseconds or less.');
+  }
+}
+
 function assertPositiveNumber(value: unknown, name: string): asserts value is number {
   assertFiniteNumber(value, name);
   if (value <= 0) {
@@ -159,6 +165,7 @@ export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   }
   assertPositiveInteger(options.frameCount, 'frameCount');
   assertFps(options.fps);
+  assertEncodedVideoDuration(options.frameCount, options.fps);
   assertH264Dimension(options.width, 'width');
   assertH264Dimension(options.height, 'height');
   assertMp4Path(options.outputPath, 'outputPath');
