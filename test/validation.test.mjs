@@ -229,6 +229,20 @@ test('rejects unsafe mix audio options before native work', () => {
   assert.throws(() => assertMixAudioOptions({
     videoPath: '/tmp/video.mp4',
     outputPath: '/tmp/mixed.mp4',
+    totalDurationMs: 3600001,
+    audioTracks: [
+      {
+        uri: '/tmp/audio.m4a',
+        startMs: 0,
+        durationMs: 1000,
+        volume: 0.8,
+      },
+    ],
+  }), /totalDurationMs must be 3600000 milliseconds or less/);
+
+  assert.throws(() => assertMixAudioOptions({
+    videoPath: '/tmp/video.mp4',
+    outputPath: '/tmp/mixed.mp4',
     totalDurationMs: 4000,
     audioTracks: [
       {

@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.22] - 2026-09-02
+
+### Fixed
+- Reject `mixAudio` jobs longer than one hour before native AVFoundation work starts.
+
+---
+
 ## [1.0.21] - 2026-09-02
 
 ### Fixed

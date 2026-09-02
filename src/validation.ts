@@ -6,6 +6,7 @@ const audioPathPattern = /\.(aac|caf|m4a|mp3|wav)$/i;
 const jpegPathPattern = /\.jpe?g$/i;
 const maxAudioTracks = 16;
 const maxH264Dimension = 8192;
+const maxTotalDurationMs = 60 * 60 * 1000;
 
 function normalizeNativePath(value: string) {
   return value.replace(/\/+$/g, '');
@@ -172,6 +173,9 @@ export function assertMixAudioOptions(options: MixAudioOptions) {
   assertMp4Path(options.outputPath, 'outputPath');
   assertDifferentPaths(options.outputPath, options.videoPath, 'outputPath', 'videoPath');
   assertPositiveNumber(options.totalDurationMs, 'totalDurationMs');
+  if (options.totalDurationMs > maxTotalDurationMs) {
+    throw new Error('expo-video-encoder: totalDurationMs must be 3600000 milliseconds or less.');
+  }
   if (!Array.isArray(options.audioTracks) || options.audioTracks.length === 0) {
     throw new Error('expo-video-encoder: audioTracks must contain at least one track.');
   }
