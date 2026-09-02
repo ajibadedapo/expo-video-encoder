@@ -5,6 +5,7 @@ const mp4PathPattern = /\.mp4$/i;
 const audioPathPattern = /\.(aac|caf|m4a|mp3|wav)$/i;
 const jpegPathPattern = /\.jpe?g$/i;
 const maxAudioTracks = 16;
+const maxH264Dimension = 8192;
 
 function normalizeNativePath(value: string) {
   return value.replace(/\/+$/g, '');
@@ -27,6 +28,13 @@ function assertEvenPositiveInteger(value: unknown, name: string): asserts value 
   assertPositiveInteger(value, name);
   if (value % 2 !== 0) {
     throw new Error(`expo-video-encoder: ${name} must be an even integer for H.264 encoding.`);
+  }
+}
+
+function assertH264Dimension(value: unknown, name: string): asserts value is number {
+  assertEvenPositiveInteger(value, name);
+  if (value > maxH264Dimension) {
+    throw new Error(`expo-video-encoder: ${name} must be ${maxH264Dimension} pixels or less for H.264 encoding.`);
   }
 }
 
@@ -150,8 +158,8 @@ export function assertEncodeVideoOptions(options: EncodeVideoOptions) {
   }
   assertPositiveInteger(options.frameCount, 'frameCount');
   assertFps(options.fps);
-  assertEvenPositiveInteger(options.width, 'width');
-  assertEvenPositiveInteger(options.height, 'height');
+  assertH264Dimension(options.width, 'width');
+  assertH264Dimension(options.height, 'height');
   assertMp4Path(options.outputPath, 'outputPath');
   assertOutputOutsideFramesDir(options.framesDir, options.outputPath);
 }

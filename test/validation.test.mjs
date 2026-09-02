@@ -94,6 +94,24 @@ test('rejects unsafe encode options before native work', () => {
     height: 1080,
     outputPath: '/tmp/out.mp4',
   }), /fps must be 240 or less/);
+
+  assert.throws(() => assertEncodeVideoOptions({
+    framesDir: '/tmp/frames',
+    frameCount: 30,
+    fps: 30,
+    width: 8194,
+    height: 1080,
+    outputPath: '/tmp/out.mp4',
+  }), /width must be 8192 pixels or less/);
+
+  assert.throws(() => assertEncodeVideoOptions({
+    framesDir: '/tmp/frames',
+    frameCount: 30,
+    fps: 30,
+    width: 1920,
+    height: 8194,
+    outputPath: '/tmp/out.mp4',
+  }), /height must be 8192 pixels or less/);
 });
 
 test('accepts valid mix audio options', () => {

@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.21] - 2026-09-02
+
+### Fixed
+- Reject frame encoding dimensions above 8192 pixels before native H.264 work starts.
+
+---
+
 ## [1.0.20] - 2026-09-01
 
 ### Fixed
