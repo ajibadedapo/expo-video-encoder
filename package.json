@@ -46,9 +46,9 @@
     "react-native": ">=0.74.0"
   },
   "devDependencies": {
-    "@types/react": "~18.2.45",
-    "@types/react-native": "^0.72.8",
-    "expo-modules-core": "^1.12.0",
-    "typescript": "~5.3.3"
+    "@types/react": "~19.2.18",
+    "@types/react-native": "^0.73.0",
+    "expo-modules-core": "^57.0.16",
+    "typescript": "~7.0.2"
   }
 }
