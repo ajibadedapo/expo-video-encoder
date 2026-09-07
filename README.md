@@ -2,9 +2,12 @@
 
 [![npm version](https://img.shields.io/npm/v/expo-video-encoder.svg)](https://www.npmjs.com/package/expo-video-encoder)
 [![npm downloads](https://img.shields.io/npm/dm/expo-video-encoder.svg)](https://www.npmjs.com/package/expo-video-encoder)
+[![Build](https://github.com/ajibadedapo/expo-video-encoder/actions/workflows/build.yml/badge.svg)](https://github.com/ajibadedapo/expo-video-encoder/actions/workflows/build.yml)
 [![license](https://img.shields.io/npm/l/expo-video-encoder.svg)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-iOS-lightgrey.svg)](https://developer.apple.com/avfoundation/)
 [![expo](https://img.shields.io/badge/expo-%3E%3D51-blue.svg)](https://expo.dev)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
+[![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](./CODE_OF_CONDUCT.md)
 
 NPM registry: [expo-video-encoder](https://www.npmjs.com/package/expo-video-encoder)
 
@@ -431,7 +434,9 @@ Want to contribute? Android support via `MediaCodec` would be the highest-impact
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to get started.
+Contributions are welcome. Because you cannot push to this repo directly, contributions go through a fork and a pull request, see [CONTRIBUTING.md](./CONTRIBUTING.md) for the step-by-step flow, local setup, and the PR checklist. Android support via `MediaCodec` is the highest-impact place to start.
+
+This project follows the [Contributor Covenant](./CODE_OF_CONDUCT.md) code of conduct. Security issues should be reported privately, see [SECURITY.md](./SECURITY.md).
 
 ---
 

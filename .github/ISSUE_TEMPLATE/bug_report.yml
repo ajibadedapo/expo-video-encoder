@@ -1,0 +1,82 @@
+name: Bug report
+description: Report something that is not working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in as much as you can so it can be reproduced quickly.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I am on the latest version of `expo-video-encoder`.
+          required: true
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I am running on iOS (this module is iOS only).
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear description of what is going wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Ideally a minimal reproduction, a Snack, or a small repo.
+      placeholder: |
+        1. Call encodeVideo with ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error output
+      description: Paste the full error and stack trace. This is automatically formatted as code.
+      render: shell
+  - type: input
+    id: package-version
+    attributes:
+      label: expo-video-encoder version
+      placeholder: e.g. 1.0.23
+    validations:
+      required: true
+  - type: input
+    id: expo-version
+    attributes:
+      label: Expo SDK version
+      placeholder: e.g. 51
+    validations:
+      required: true
+  - type: input
+    id: rn-version
+    attributes:
+      label: React Native version
+      placeholder: e.g. 0.74.5
+    validations:
+      required: true
+  - type: input
+    id: ios-version
+    attributes:
+      label: iOS version and device
+      placeholder: e.g. iOS 17.5, iPhone 14 (physical) or simulator
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help, screenshots, links, or a reproduction repo.

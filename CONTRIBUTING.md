@@ -1,22 +1,109 @@
 # Contributing to expo-video-encoder
 
-Thank you for your interest in contributing. This document covers how to set up a development environment, the project structure, and the contribution process.
+Thanks for your interest in contributing. Bug reports, docs fixes, and pull requests are all welcome. This guide covers how to report issues, set up a development environment, and open a pull request that gets merged quickly.
+
+By participating you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.md).
 
 ---
 
-## Project structure
+## Ways to contribute
+
+- **Report a bug:** open an [issue](https://github.com/ajibadedapo/expo-video-encoder/issues/new/choose) using the Bug report form.
+- **Request a feature:** open an issue using the Feature request form.
+- **Improve the docs:** typo fixes and clearer explanations are genuinely valued and easy to merge.
+- **Write code:** fix a bug or pick up a roadmap item (see below). For anything large, open an issue first so we can agree on the approach before you spend time on it.
+
+### Highest-impact contribution: Android support
+
+The module is iOS only today. The Android equivalent uses `MediaCodec`, Android's built-in hardware H.264 encoder. The JavaScript API stays identical; only the native layer differs.
 
 ```
-expo-video-encoder/
-├── src/
-│   └── index.ts              # TypeScript JS/TS API — types + requireNativeModule
-├── ios/
-│   └── VideoEncoderModule.swift  # AVFoundation implementation (Swift)
-├── ExpoVideoEncoder.podspec  # CocoaPods podspec
-├── expo-module.config.json   # Expo autolinking config
-├── package.json
-├── tsconfig.json
-└── build/                    # Compiled output (generated, not committed)
+android/
+├── build.gradle
+├── src/main/
+│   ├── AndroidManifest.xml
+│   └── java/expo/modules/videoencoder/
+│       └── VideoEncoderModule.kt    (MediaCodec implementation)
+```
+
+The Kotlin implementation follows the same pattern as the Swift one:
+1. Open a `MediaCodec` encoder in `CONFIGURE_FLAG_ENCODE` mode.
+2. For each JPEG frame: decode to `Bitmap`, draw to the `Surface` input.
+3. Drain the output buffers into a `MediaMuxer`.
+4. For audio mixing: use `MediaExtractor` + `MediaMuxer` to combine tracks.
+
+Resources: [MediaCodec](https://developer.android.com/reference/android/media/MediaCodec) · [MediaMuxer](https://developer.android.com/reference/android/media/MediaMuxer) · [Expo modules Android guide](https://docs.expo.dev/modules/module-api/).
+
+---
+
+## The pull request workflow (fork based)
+
+You do **not** have push access to this repository, and you do not need it. Like almost every open-source project, contributions come in through a fork and a pull request. If you tried `git push origin your-branch` against this repo and saw `Permission denied`, this is the flow you want instead.
+
+### 1. Fork the repository
+
+Click **Fork** at the top of [the repo page](https://github.com/ajibadedapo/expo-video-encoder). That creates `https://github.com/<your-username>/expo-video-encoder` under your own account, which you can push to freely.
+
+### 2. Clone your fork (not the original)
+
+```sh
+git clone https://github.com/<your-username>/expo-video-encoder.git
+cd expo-video-encoder
+```
+
+### 3. Add the original repo as `upstream`
+
+This lets you keep your fork in sync with the main project.
+
+```sh
+git remote add upstream https://github.com/ajibadedapo/expo-video-encoder.git
+git remote -v
+# origin    https://github.com/<your-username>/expo-video-encoder.git (your fork, you can push here)
+# upstream  https://github.com/ajibadedapo/expo-video-encoder.git      (the original, read only)
+```
+
+### 4. Create a branch off an up-to-date `main`
+
+```sh
+git fetch upstream
+git checkout -b feat/android-support upstream/main
+```
+
+Use a descriptive branch name: `feat/...` for features, `fix/...` for bug fixes, `docs/...` for documentation.
+
+### 5. Make your changes and validate locally
+
+```sh
+npm install
+npm run build          # compile src/ to build/
+npm test               # run the test suite
+npm run package:check  # build + test + verify the published package
+```
+
+Please run `npm run package:check` before opening a PR. It is the same gate CI runs, so passing it locally means CI should pass too.
+
+### 6. Commit and push to your fork
+
+```sh
+git add .
+git commit -m "feat: add Android MediaCodec encoder"
+git push origin feat/android-support
+```
+
+Here `origin` is **your fork**, which you have permission to push to.
+
+### 7. Open the pull request
+
+Go to your fork on GitHub. It will offer a **Compare & pull request** button. Open the PR against `ajibadedapo/expo-video-encoder`'s `main` branch, fill in the template, and submit.
+
+### 8. Keep your branch current (if asked)
+
+If `main` moves while your PR is open:
+
+```sh
+git fetch upstream
+git rebase upstream/main
+git push --force-with-lease origin feat/android-support
 ```
 
 ---
@@ -31,19 +118,10 @@ expo-video-encoder/
 - Yarn or npm
 - An Expo project to test against (React Native 0.74+, Expo SDK 51+)
 
-### Local development
-
-1. **Fork and clone the repo**
-
-```sh
-git clone https://github.com/ajibadedapo/expo-video-encoder.git
-cd expo-video-encoder
-npm install
-```
-
-2. **Link to a local Expo project for testing**
+### Linking to a local Expo project for testing
 
 In your test app's `package.json`:
+
 ```json
 {
   "dependencies": {
@@ -52,66 +130,77 @@ In your test app's `package.json`:
 }
 ```
 
-Then run `npx expo prebuild` in your test app to pick up the local version.
+Then run `npx expo prebuild` in the test app to pick up your local version.
 
-3. **Edit the Swift module**
+### Editing the native module
 
-Changes to `ios/VideoEncoderModule.swift` take effect after running `npx expo prebuild` + rebuilding the Xcode project. Open `ios/YourApp.xcworkspace` in Xcode for the fastest native iteration loop.
+Changes to `ios/VideoEncoderModule.swift` take effect after `npx expo prebuild` and rebuilding the Xcode project. Open `ios/YourApp.xcworkspace` in Xcode for the fastest native iteration loop.
 
-4. **Edit the TypeScript API**
+### Editing the TypeScript API
 
 ```sh
-npm run build  # compiles src/ → build/
+npm run build  # compiles src/ to build/
 ```
 
 ---
 
-## The highest-impact contribution: Android support
-
-The module currently only supports iOS. The Android equivalent uses `MediaCodec` — Android's built-in hardware H.264 encoder. The API surface would be identical; only the native layer differs.
-
-**What's needed:**
+## Project structure
 
 ```
-android/
-├── build.gradle
-├── src/main/
-│   ├── AndroidManifest.xml
-│   └── java/expo/modules/videoencoder/
-│       └── VideoEncoderModule.kt    ← MediaCodec implementation
+expo-video-encoder/
+├── src/
+│   └── index.ts                  TypeScript JS/TS API (types + requireNativeModule)
+├── ios/
+│   └── VideoEncoderModule.swift  AVFoundation implementation (Swift)
+├── test/                         node:test suites
+├── scripts/                      package verification tooling
+├── ExpoVideoEncoder.podspec      CocoaPods podspec
+├── expo-module.config.json       Expo autolinking config
+├── package.json
+├── tsconfig.json
+└── build/                        Compiled output (generated, not committed)
 ```
-
-The Kotlin implementation would follow the same pattern:
-1. Open a `MediaCodec` encoder in `CONFIGURE_FLAG_ENCODE` mode
-2. For each JPEG frame: decode to `Bitmap` → draw to `Surface` input
-3. Drain the output buffers into a `MediaMuxer`
-4. For audio mixing: use `MediaExtractor` + `MediaMuxer` to combine tracks
-
-**Resources:**
-- [MediaCodec Android docs](https://developer.android.com/reference/android/media/MediaCodec)
-- [MediaMuxer Android docs](https://developer.android.com/reference/android/media/MediaMuxer)
-- [Expo modules Android guide](https://docs.expo.dev/modules/module-api/)
 
 ---
 
-## Submitting a pull request
+## Pull request checklist
 
-1. Create a branch from `main`: `git checkout -b feat/android-support`
-2. Make your changes
-3. Build TypeScript: `npm run build`
-4. Test in a real Expo project on a physical device or simulator
-5. Update `CHANGELOG.md` with a brief description under `[Unreleased]`
-6. Open a PR with a clear description of what changed and why
+Before you request review, confirm:
+
+- [ ] The change is focused. One logical change per PR.
+- [ ] `npm run package:check` passes locally.
+- [ ] New behavior is covered by a test where practical, and tested in a real Expo project on a device or simulator for native changes.
+- [ ] `CHANGELOG.md` has an entry under `[Unreleased]`.
+- [ ] Docs (README/API reference) are updated if the public API changed.
+- [ ] The PR description explains what changed and why.
+
+Maintainers aim to give a first response within a few days. A green CI run and a filled-in template make review fast.
+
+---
+
+## Commit messages
+
+We loosely follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat: add HEVC output option
+fix: strip file:// prefix before passing paths to AVFoundation
+docs: clarify the fork based contribution flow
+```
+
+This is a preference, not a hard gate. Clear history matters more than exact syntax.
 
 ---
 
 ## Reporting bugs
 
-Open an issue at https://github.com/ajibadedapo/expo-video-encoder/issues
+Open an issue at https://github.com/ajibadedapo/expo-video-encoder/issues and include:
 
-Please include:
+- `expo-video-encoder` version
 - Expo SDK version
 - React Native version
-- iOS version
+- iOS version and device (simulator or physical)
 - A minimal reproduction (ideally a Snack or small repo)
 - The full error message and stack trace
+
+For anything security related, do **not** open a public issue. See [SECURITY.md](./SECURITY.md).

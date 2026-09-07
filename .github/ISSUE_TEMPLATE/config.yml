@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/ajibadedapo/expo-video-encoder/discussions
+    about: Ask questions and get help from the community here.
+  - name: Report a security vulnerability
+    url: https://github.com/ajibadedapo/expo-video-encoder/security/advisories/new
+    about: Please report vulnerabilities privately, not as a public issue.
