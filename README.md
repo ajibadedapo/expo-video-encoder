@@ -4,14 +4,14 @@
 [![npm downloads](https://img.shields.io/npm/dm/expo-video-encoder.svg)](https://www.npmjs.com/package/expo-video-encoder)
 [![Build](https://github.com/ajibadedapo/expo-video-encoder/actions/workflows/build.yml/badge.svg)](https://github.com/ajibadedapo/expo-video-encoder/actions/workflows/build.yml)
 [![license](https://img.shields.io/npm/l/expo-video-encoder.svg)](./LICENSE)
-[![platform](https://img.shields.io/badge/platform-iOS-lightgrey.svg)](https://developer.apple.com/avfoundation/)
+[![platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey.svg)](#platform-support)
 [![expo](https://img.shields.io/badge/expo-%3E%3D51-blue.svg)](https://expo.dev)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 [![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](./CODE_OF_CONDUCT.md)
 
 NPM registry: [expo-video-encoder](https://www.npmjs.com/package/expo-video-encoder)
 
-> Encode a sequence of JPEG frames into an H.264 MP4, natively on iOS using AVFoundation. Zero external dependencies. No binaries to download. No servers.
+> Encode a sequence of JPEG frames into an H.264 MP4, natively on iOS (AVFoundation) and Android (MediaCodec). Zero external dependencies. No binaries to download. No servers.
 
 ---
 
@@ -36,12 +36,13 @@ Apple ships a fully capable video encoder in every iPhone and iPad called **AVFo
 ## Features
 
 - **H.264 MP4 encoding:** industry-standard format, plays everywhere
+- **Cross-platform:** frame encoding runs on iOS (AVFoundation) and Android (MediaCodec) behind one API
 - **Frame-by-frame assembly:** snapshot your canvas, Skia surface, or any pixel source
-- **Audio mixing:** layer multiple audio tracks with independent start times and volumes
-- **Hardware accelerated:** AVFoundation uses the device's video encoder chip
+- **Audio mixing:** layer multiple audio tracks with independent start times and volumes (iOS today, see [Platform support](#platform-support))
+- **Hardware accelerated:** uses the device's built-in video encoder chip on both platforms
 - **Zero external dependencies:** no CocoaPods binary downloads, no xcframework, no surprises
 - **Expo autolinking:** install and it works, no manual native setup
-- **iOS 13.4+:** covers virtually all devices in the wild today
+- **iOS 13.4+ and Android 7.0+ (API 24):** covers virtually all devices in the wild today
 - **TypeScript first:** full type definitions included
 
 ---
@@ -78,6 +79,8 @@ Each frame is:
 4. Appended to the `AVAssetWriterInputPixelBufferAdaptor` at its presentation timestamp (`frame_index / fps`)
 
 The `AVAssetWriter` session is kept open across all frames, then finalized with `markAsFinished()` + `finishWriting()`.
+
+On Android the same pipeline runs through `MediaCodec` (an H.264 encoder configured with `COLOR_FormatYUV420Flexible`) feeding a `MediaMuxer`. Each JPEG is decoded to a `Bitmap`, converted to YUV, and queued as an input buffer with an explicit presentation timestamp of `frame_index / fps`; encoded samples are drained to the muxer until end of stream. The public API and the output MP4 are identical to iOS.
 
 ### Audio mixing
 
@@ -121,9 +124,20 @@ Then regenerate your native project:
 npx expo prebuild
 ```
 
-No `app.json` plugin is needed. Expo's autolinking detects the `expo-module.config.json` and wires up the native module automatically.
+No `app.json` plugin is needed. Expo's autolinking detects the `expo-module.config.json` and wires up the native module automatically on both iOS and Android.
 
-> **Note:** This module has no effect on Android. It throws a clear error if called on a non-iOS platform. Use a `Platform.OS === 'ios'` guard in your code.
+> **Note:** `encodeVideo` runs on iOS and Android. `mixAudio` is iOS only for now (see [Platform support](#platform-support)); on Android it throws, and since audio mixing is designed to be non-fatal, callers should fall back to the silent video. On any non-mobile platform (web) both functions throw a clear error.
+
+---
+
+## Platform support
+
+| Function | iOS | Android | Native backend |
+|----------|-----|---------|----------------|
+| `encodeVideo` | ✅ 13.4+ | ✅ 7.0+ (API 24) | AVFoundation (iOS), MediaCodec + MediaMuxer (Android) |
+| `mixAudio` | ✅ 13.4+ | ⬜ not yet | AVMutableComposition + AVAssetExportSession (iOS) |
+
+Android audio mixing is tracked as a follow-up. Because `mixAudio` failures are expected to be non-fatal, the recommended pattern already falls back to the silent video when it throws, so Android apps keep working with export-without-audio today. See [CONTRIBUTING.md](./CONTRIBUTING.md) if you want to help build it.
 
 ---
 
@@ -241,6 +255,8 @@ Assembles a directory of JPEG frames into an H.264 MP4 file.
 ### `mixAudio(options: MixAudioOptions): Promise<boolean>`
 
 Mixes one or more audio tracks onto an existing silent MP4.
+
+> **iOS only for now.** On Android this throws; treat it as non-fatal and fall back to the silent video (the example below already does). See [Platform support](#platform-support).
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
@@ -422,13 +438,14 @@ This is the most common source of "file not found" errors.
 
 ## Roadmap
 
-- [ ] **Android support** via `MediaCodec`, using Android's native H.264 encoder
+- [x] **Android frame encoding** via `MediaCodec` + `MediaMuxer` (`encodeVideo`)
+- [ ] **Android audio mixing** (`mixAudio`) via `MediaExtractor` + `MediaMuxer`
 - [ ] **Progress callbacks:** per-frame encode progress from native to JS
 - [ ] **Quality presets:** CRF control for file size vs. quality tradeoff
 - [ ] **HEVC / H.265:** smaller files at the same quality on iOS 11+
 - [ ] **Frame timestamp control:** variable frame rate support
 
-Want to contribute? Android support via `MediaCodec` would be the highest-impact next step. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Want to contribute? Android audio mixing is now the highest-impact next step. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ---
 

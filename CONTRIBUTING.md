@@ -13,26 +13,19 @@ By participating you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.m
 - **Improve the docs:** typo fixes and clearer explanations are genuinely valued and easy to merge.
 - **Write code:** fix a bug or pick up a roadmap item (see below). For anything large, open an issue first so we can agree on the approach before you spend time on it.
 
-### Highest-impact contribution: Android support
+### Highest-impact contribution: Android audio mixing
 
-The module is iOS only today. The Android equivalent uses `MediaCodec`, Android's built-in hardware H.264 encoder. The JavaScript API stays identical; only the native layer differs.
+Android frame encoding (`encodeVideo`) has landed. It lives in `android/src/main/java/expo/modules/videoencoder/VideoEncoderModule.kt` and uses `MediaCodec` (H.264, `COLOR_FormatYUV420Flexible`) feeding a `MediaMuxer`, matching the iOS output. It still needs broad on-device testing across encoders, so bug reports and fixes there are welcome.
 
-```
-android/
-├── build.gradle
-├── src/main/
-│   ├── AndroidManifest.xml
-│   └── java/expo/modules/videoencoder/
-│       └── VideoEncoderModule.kt    (MediaCodec implementation)
-```
+The remaining Android gap is **`mixAudio`**. On Android it currently throws `MIX_UNSUPPORTED`, which callers treat as non-fatal (they fall back to the silent video). A full implementation combines multiple non-overlapping audio tracks, with per-track volume, onto the encoded video:
 
-The Kotlin implementation follows the same pattern as the Swift one:
-1. Open a `MediaCodec` encoder in `CONFIGURE_FLAG_ENCODE` mode.
-2. For each JPEG frame: decode to `Bitmap`, draw to the `Surface` input.
-3. Drain the output buffers into a `MediaMuxer`.
-4. For audio mixing: use `MediaExtractor` + `MediaMuxer` to combine tracks.
+1. Copy the encoded video track from the source MP4 into the output.
+2. For each audio track: decode with `MediaExtractor` + a `MediaCodec` decoder to PCM, apply the track volume, and place it at its `startMs` offset.
+3. Re-encode the combined audio to AAC and mux it alongside the video with `MediaMuxer`.
 
-Resources: [MediaCodec](https://developer.android.com/reference/android/media/MediaCodec) · [MediaMuxer](https://developer.android.com/reference/android/media/MediaMuxer) · [Expo modules Android guide](https://docs.expo.dev/modules/module-api/).
+Mind memory for long videos: mix in streamed chunks rather than buffering the whole PCM timeline. The JS validation layer already guarantees tracks do not overlap and stay within `totalDurationMs`, which simplifies the timeline.
+
+Resources: [MediaCodec](https://developer.android.com/reference/android/media/MediaCodec) · [MediaMuxer](https://developer.android.com/reference/android/media/MediaMuxer) · [MediaExtractor](https://developer.android.com/reference/android/media/MediaExtractor) · [Expo modules Android guide](https://docs.expo.dev/modules/module-api/).
 
 ---
 

@@ -53,7 +53,11 @@ export type MixAudioOptions = {
 // ─── Platform guard ───────────────────────────────────────────────────────────
 
 function unsupported(fn: string): never {
-  throw new Error(`expo-video-encoder: ${fn} is only supported on iOS.`);
+  throw new Error(`expo-video-encoder: ${fn} is only supported on iOS and Android.`);
+}
+
+function isSupportedPlatform(): boolean {
+  return Platform.OS === 'ios' || Platform.OS === 'android';
 }
 
 // ─── Module ───────────────────────────────────────────────────────────────────
@@ -66,7 +70,8 @@ function getNative() {
 }
 
 /**
- * Assembles a sequence of JPEG frames into an H.264 MP4 using AVFoundation.
+ * Assembles a sequence of JPEG frames into an H.264 MP4, using AVFoundation on
+ * iOS and MediaCodec + MediaMuxer on Android.
  *
  * Frame files must live in `framesDir` and follow the naming convention:
  *   frame_000000.jpg, frame_000001.jpg, …
@@ -74,9 +79,10 @@ function getNative() {
  * @returns `true` on success, throws on failure.
  *
  * @platform ios
+ * @platform android
  */
 export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean> {
-  if (Platform.OS !== 'ios') unsupported('encodeVideo');
+  if (!isSupportedPlatform()) unsupported('encodeVideo');
   assertEncodeVideoOptions(options);
   return getNative()!.encodeVideo(options);
 }
@@ -86,14 +92,17 @@ export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean>
  * AVMutableComposition + AVAssetExportSession.
  *
  * Audio mix failures should be treated as non-fatal, callers can fall back
- * to the silent video if this throws.
+ * to the silent video if this throws. Android does not yet implement audio
+ * mixing; calling this on Android throws.
  *
  * @returns `true` on success, throws on failure.
  *
  * @platform ios
  */
 export async function mixAudio(options: MixAudioOptions): Promise<boolean> {
-  if (Platform.OS !== 'ios') unsupported('mixAudio');
+  if (Platform.OS !== 'ios') {
+    throw new Error('expo-video-encoder: mixAudio is only supported on iOS.');
+  }
   assertMixAudioOptions(options);
   return getNative()!.mixAudio(options);
 }

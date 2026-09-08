@@ -7,6 +7,7 @@
   "files": [
     "build",
     "ios",
+    "android",
     "src",
     "ExpoVideoEncoder.podspec",
     "expo-module.config.json",
