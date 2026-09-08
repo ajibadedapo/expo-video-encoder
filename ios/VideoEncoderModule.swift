@@ -190,6 +190,8 @@ public class VideoEncoderModule: Module {
       return
     }
 
+    var audioMixParams: [AVMutableAudioMixInputParameters] = []
+
     for trackInfo in audioTracks {
       guard
         let uri        = trackInfo["uri"]        as? String,
@@ -197,6 +199,7 @@ public class VideoEncoderModule: Module {
         let durationMs = trackInfo["durationMs"] as? Double
       else { continue }
 
+      let volume     = (trackInfo["volume"] as? Double) ?? 1.0
       let audioURL   = URL(string: uri) ?? URL(fileURLWithPath: uri)
       let audioAsset = AVURLAsset(url: audioURL)
       let startTime  = CMTime(value: CMTimeValue(startMs), timescale: 1000)
@@ -212,6 +215,10 @@ public class VideoEncoderModule: Module {
         of: srcAudio,
         at: startTime
       )
+
+      let params = AVMutableAudioMixInputParameters(track: compAudio)
+      params.setVolume(Float(min(max(volume, 0), 1)), at: .zero)
+      audioMixParams.append(params)
     }
 
     let outputURL = URL(fileURLWithPath: outputPath)
@@ -225,6 +232,12 @@ public class VideoEncoderModule: Module {
     session.outputURL      = outputURL
     session.outputFileType = .mp4
     session.timeRange      = CMTimeRange(start: .zero, duration: totalDuration)
+
+    if !audioMixParams.isEmpty {
+      let audioMix = AVMutableAudioMix()
+      audioMix.inputParameters = audioMixParams
+      session.audioMix = audioMix
+    }
 
     session.exportAsynchronously {
       switch session.status {
