@@ -25,13 +25,18 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+      - name: Build and pack the module
+        working-directory: expo-video-encoder
+        run: |
+          npm ci
+          npm pack
       - name: Scaffold a host Expo app
         run: npx --yes create-expo-app@latest host --template blank --no-install
-      - name: Install host app dependencies and the local module
+      - name: Install host app dependencies and the packed module
         working-directory: host
         run: |
           npm install
-          npm install ../expo-video-encoder
+          npm install ../expo-video-encoder/expo-video-encoder-*.tgz
       - name: Prebuild the Android project
         working-directory: host
         run: npx expo prebuild --platform android --no-install
