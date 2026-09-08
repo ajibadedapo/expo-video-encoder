@@ -9,6 +9,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Android support for `encodeVideo`** via `MediaCodec` (H.264) and `MediaMuxer`, matching the iOS output and API. Frames are decoded, converted to YUV, and queued with explicit presentation timestamps (`frame_index / fps`). Autolinking now covers Android through `expo-module.config.json`.
+
+### Changed
+- The JS platform guard now allows both iOS and Android for `encodeVideo` (previously iOS only). Non-mobile platforms still throw a clear error.
+
+### Fixed
+- `tsconfig.json` now compiles under TypeScript 7 (the pinned dev version): set `module`/`moduleResolution` to `node16` and added an explicit `rootDir`. A clean `npm ci` previously failed in the `prepare` step because TS 7 removed `moduleResolution: "node"`, which was breaking CI.
+
+### Notes
+- `mixAudio` remains iOS only. On Android it throws `MIX_UNSUPPORTED`; treat it as non-fatal and fall back to the silent video from `encodeVideo`. Android audio mixing is tracked as a follow-up.
+- The Android native code has not yet been exercised on a device in CI (CI runs on macOS and validates JS + package only). Build and test on a device before cutting a release.
+
 ---
 
 ## [1.0.23] - 2026-09-02
