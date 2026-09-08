@@ -1,0 +1,43 @@
+name: Android
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: expo-video-encoder
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Scaffold a host Expo app
+        run: npx --yes create-expo-app@latest host --template blank --no-install
+      - name: Install host app dependencies and the local module
+        working-directory: host
+        run: |
+          npm install
+          npm install ../expo-video-encoder
+      - name: Prebuild the Android project
+        working-directory: host
+        run: npx expo prebuild --platform android --no-install
+      - name: Compile the native module
+        working-directory: host/android
+        run: |
+          ./gradlew :expo-video-encoder:compileDebugKotlin --no-daemon --stacktrace \
+            || ./gradlew :expo-video-encoder:assembleDebug --no-daemon --stacktrace \
+            || ./gradlew assembleDebug --no-daemon --stacktrace
