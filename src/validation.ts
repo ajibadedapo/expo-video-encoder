@@ -1,6 +1,7 @@
 import type { AudioTrack, EncodeVideoOptions, MixAudioOptions } from './index';
 
 const fileSchemePattern = /^file:\/\//i;
+const absoluteNativePathPattern = /^\//;
 const mp4PathPattern = /\.mp4$/i;
 const audioPathPattern = /\.(aac|caf|m4a|mp3|wav)$/i;
 const jpegPathPattern = /\.jpe?g$/i;
@@ -82,6 +83,9 @@ function assertNativePath(value: unknown, name: string): asserts value is string
   }
   if (fileSchemePattern.test(value)) {
     throw new Error(`expo-video-encoder: ${name} must not include a file:// prefix.`);
+  }
+  if (!absoluteNativePathPattern.test(value)) {
+    throw new Error(`expo-video-encoder: ${name} must be an absolute native path.`);
   }
 }
 
