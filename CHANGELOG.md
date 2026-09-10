@@ -17,6 +17,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - `tsconfig.json` now compiles under TypeScript 7 (the pinned dev version): set `module`/`moduleResolution` to `node16` and added an explicit `rootDir`. A clean `npm ci` previously failed in the `prepare` step because TS 7 removed `moduleResolution: "node"`, which was breaking CI.
+- The package verifier now requires the Android native runtime files in the npm tarball before release.
 
 ### Notes
 - `mixAudio` remains iOS only. On Android it throws `MIX_UNSUPPORTED`; treat it as non-fatal and fall back to the silent video from `encodeVideo`. Android audio mixing is tracked as a follow-up.
