@@ -60,6 +60,15 @@ test('rejects unsafe encode options before native work', () => {
   }), /outputPath must be outside framesDir/);
 
   assert.throws(() => assertEncodeVideoOptions({
+    framesDir: '/tmp/Frames',
+    frameCount: 30,
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    outputPath: '/tmp/frames/output.mp4',
+  }), /outputPath must be outside framesDir/);
+
+  assert.throws(() => assertEncodeVideoOptions({
     framesDir: '/tmp/frames/frame_000001.jpg',
     frameCount: 30,
     fps: 30,
@@ -211,6 +220,20 @@ test('rejects unsafe mix audio options before native work', () => {
   }), /outputPath must be different from videoPath/);
 
   assert.throws(() => assertMixAudioOptions({
+    videoPath: '/tmp/Video.mp4',
+    outputPath: '/tmp/video.mp4',
+    totalDurationMs: 2000,
+    audioTracks: [
+      {
+        uri: '/tmp/audio.m4a',
+        startMs: 0,
+        durationMs: 1000,
+        volume: 0.8,
+      },
+    ],
+  }), /outputPath must be different from videoPath/);
+
+  assert.throws(() => assertMixAudioOptions({
     videoPath: '/tmp/video.mp4',
     outputPath: '/tmp/mixed.mp4',
     totalDurationMs: 2000,
@@ -265,6 +288,26 @@ test('rejects unsafe mix audio options before native work', () => {
     audioTracks: [
       {
         uri: '/tmp/voiceover.m4a',
+        startMs: 0,
+        durationMs: 1000,
+        volume: 0.8,
+      },
+      {
+        uri: '/tmp/voiceover.m4a',
+        startMs: 2000,
+        durationMs: 1000,
+        volume: 0.4,
+      },
+    ],
+  }), /audioTracks\[1\]\.uri must be different/);
+
+  assert.throws(() => assertMixAudioOptions({
+    videoPath: '/tmp/video.mp4',
+    outputPath: '/tmp/mixed.mp4',
+    totalDurationMs: 4000,
+    audioTracks: [
+      {
+        uri: '/tmp/Voiceover.m4a',
         startMs: 0,
         durationMs: 1000,
         volume: 0.8,

@@ -10,7 +10,7 @@ const maxH264Dimension = 8192;
 const maxTotalDurationMs = 60 * 60 * 1000;
 
 function normalizeNativePath(value: string) {
-  return value.replace(/\/+$/g, '');
+  return value.replace(/\/+$/g, '').toLowerCase();
 }
 
 function assertFiniteNumber(value: unknown, name: string): asserts value is number {
@@ -136,7 +136,7 @@ function assertAudioTracksDoNotOverlap(tracks: AudioTrack[]) {
 function assertAudioTracksUseDifferentInputs(tracks: AudioTrack[]) {
   const seen = new Map<string, number>();
   tracks.forEach((track, index) => {
-    const uri = track.uri.trim();
+    const uri = normalizeNativePath(track.uri.trim());
     const previous = seen.get(uri);
     if (typeof previous === 'number') {
       throw new Error(`expo-video-encoder: audioTracks[${index}].uri must be different from audioTracks[${previous}].uri.`);
@@ -146,14 +146,14 @@ function assertAudioTracksUseDifferentInputs(tracks: AudioTrack[]) {
 }
 
 function assertDifferentPaths(left: string, right: string, leftName: string, rightName: string) {
-  if (left.trim() === right.trim()) {
+  if (normalizeNativePath(left.trim()) === normalizeNativePath(right.trim())) {
     throw new Error(`expo-video-encoder: ${leftName} must be different from ${rightName}.`);
   }
 }
 
 function assertOutputOutsideFramesDir(framesDir: string, outputPath: string) {
   const dir = normalizeNativePath(framesDir.trim());
-  const output = outputPath.trim();
+  const output = normalizeNativePath(outputPath.trim());
   if (output === dir || output.startsWith(`${dir}/`)) {
     throw new Error('expo-video-encoder: outputPath must be outside framesDir.');
   }
