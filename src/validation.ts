@@ -183,7 +183,7 @@ export function assertMixAudioOptions(options: MixAudioOptions) {
   assertMp4Path(options.videoPath, 'videoPath');
   assertMp4Path(options.outputPath, 'outputPath');
   assertDifferentPaths(options.outputPath, options.videoPath, 'outputPath', 'videoPath');
-  assertPositiveNumber(options.totalDurationMs, 'totalDurationMs');
+  assertPositiveInteger(options.totalDurationMs, 'totalDurationMs');
   if (options.totalDurationMs > maxTotalDurationMs) {
     throw new Error('expo-video-encoder: totalDurationMs must be 3600000 milliseconds or less.');
   }
