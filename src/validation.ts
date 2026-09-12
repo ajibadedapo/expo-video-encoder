@@ -87,6 +87,9 @@ function assertNativePath(value: unknown, name: string): asserts value is string
   if (!absoluteNativePathPattern.test(value)) {
     throw new Error(`expo-video-encoder: ${name} must be an absolute native path.`);
   }
+  if (value.split('/').some((segment) => segment === '.' || segment === '..')) {
+    throw new Error(`expo-video-encoder: ${name} must not include . or .. path segments.`);
+  }
 }
 
 function assertMp4Path(value: unknown, name: string): asserts value is string {
