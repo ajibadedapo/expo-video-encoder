@@ -24,7 +24,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Build and pack the module
         working-directory: expo-video-encoder
         run: |
