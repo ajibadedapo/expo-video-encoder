@@ -24,6 +24,8 @@ if (pack.status !== 0) {
     "build/index.js",
     "build/validation.d.ts",
     "build/validation.js",
+    "build/paths.d.ts",
+    "build/paths.js",
     "android/build.gradle",
     "android/src/main/AndroidManifest.xml",
     "android/src/main/java/expo/modules/videoencoder/VideoEncoderModule.kt",

@@ -10,9 +10,11 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `frameFileName`, `frameFilePath`, `toNativePath`, and `isAudioMixSupported` helpers. They produce the exact `frame_000000.jpg` names the encoder reads, convert `file://` URIs (including percent-encoded folder names) to native paths, and let apps skip audio mixing where it is not implemented.
 - **Android support for `encodeVideo`** via `MediaCodec` (H.264) and `MediaMuxer`, matching the iOS output and API. Frames are decoded, converted to YUV, and queued with explicit presentation timestamps (`frame_index / fps`). Autolinking now covers Android through `expo-module.config.json`.
 
 ### Changed
+- The npm package description now reflects Android encoding support.
 - The JS platform guard now allows both iOS and Android for `encodeVideo` (previously iOS only). Non-mobile platforms still throw a clear error.
 
 ### Fixed

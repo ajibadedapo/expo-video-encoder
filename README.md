@@ -148,7 +148,7 @@ The minimum viable video export:
 ```typescript
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
-import { encodeVideo } from 'expo-video-encoder';
+import { encodeVideo, toNativePath } from 'expo-video-encoder';
 
 async function exportVideo() {
   const framesDir = `${FileSystem.cacheDirectory}frames/`;
@@ -162,12 +162,12 @@ async function exportVideo() {
 
   // 3. Encode
   await encodeVideo({
-    framesDir:  framesDir.replace(/^file:\/\//, ''),
+    framesDir:  toNativePath(framesDir),
     frameCount: 60,   // number of frames you wrote
     fps:        30,
     width:      1920,
     height:     1080,
-    outputPath: outputPath.replace(/^file:\/\//, ''),
+    outputPath: toNativePath(outputPath),
   });
 
   // 4. Save to Photos library
@@ -197,15 +197,16 @@ async function captureFrame(): Promise<string> {
 Then in your frame loop:
 
 ```typescript
+import { frameFileName } from 'expo-video-encoder';
+
 for (let i = 0; i < totalFrames; i++) {
   // seek your animation to frame i / fps seconds
   seekTo(i / fps);
   await new Promise(r => requestAnimationFrame(r)); // let Skia render
 
   const base64 = await captureFrame();
-  const frameName = `frame_${String(i).padStart(6, '0')}.jpg`;
   await FileSystem.writeAsStringAsync(
-    `${framesDir}${frameName}`,
+    `${framesDir}${frameFileName(i)}`,
     base64,
     { encoding: FileSystem.EncodingType.Base64 }
   );
@@ -252,6 +253,15 @@ Assembles a directory of JPEG frames into an H.264 MP4 file.
 
 ---
 
+### Path and frame helpers
+
+| Function | Returns | Description |
+|---|---|---|
+| `frameFileName(index)` | `string` | The file name the encoder reads for a frame, e.g. `frameFileName(7)` is `frame_000007.jpg`. Throws for indexes outside 0 to 999999. |
+| `frameFilePath(framesDir, index)` | `string` | `framesDir` (plain path or `file://` URI) joined with `frameFileName(index)`, as a native path. |
+| `toNativePath(uri)` | `string` | Strips `file://`, decodes percent-encoding, and returns a plain absolute path. Plain paths pass through unchanged. |
+| `isAudioMixSupported()` | `boolean` | `true` where `mixAudio` is implemented (iOS today). Use it to skip the audio step instead of catching an error. |
+
 ### `mixAudio(options: MixAudioOptions): Promise<boolean>`
 
 Mixes one or more audio tracks onto an existing silent MP4.
@@ -286,7 +296,7 @@ A production-ready export flow with progress reporting:
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
-import { encodeVideo, mixAudio } from 'expo-video-encoder';
+import { encodeVideo, frameFileName, isAudioMixSupported, mixAudio, toNativePath } from 'expo-video-encoder';
 import { Platform } from 'react-native';
 
 type ExportOptions = {
@@ -329,8 +339,7 @@ export async function runExport(options: ExportOptions): Promise<string | null> 
   for (let i = 0; i < frameCount; i++) {
     onProgress('Capturing frames', i / frameCount);
     const base64 = await captureFrame(i);
-    const name = `frame_${String(i).padStart(6, '0')}.jpg`;
-    await FileSystem.writeAsStringAsync(`${framesDir}${name}`, base64, {
+    await FileSystem.writeAsStringAsync(`${framesDir}${frameFileName(i)}`, base64, {
       encoding: FileSystem.EncodingType.Base64,
     });
   }
@@ -338,24 +347,24 @@ export async function runExport(options: ExportOptions): Promise<string | null> 
   // ── 3. Encode ───────────────────────────────────────────────────────────────
   onProgress('Encoding video', 0);
   await encodeVideo({
-    framesDir:  framesDir.replace(/^file:\/\//, ''),
+    framesDir:  toNativePath(framesDir),
     frameCount,
     fps,
     width,
     height,
-    outputPath: silentMp4.replace(/^file:\/\//, ''),
+    outputPath: toNativePath(silentMp4),
   });
   onProgress('Encoding video', 1);
 
   // ── 4. Mix audio (non-fatal) ─────────────────────────────────────────────
   let finalPath = silentMp4;
-  if (audioTracks.length > 0) {
+  if (audioTracks.length > 0 && isAudioMixSupported()) {
     onProgress('Mixing audio', 0);
     try {
       await mixAudio({
-        videoPath:       silentMp4.replace(/^file:\/\//, ''),
+        videoPath:       toNativePath(silentMp4),
         audioTracks,
-        outputPath:      mixedMp4.replace(/^file:\/\//, ''),
+        outputPath:      toNativePath(mixedMp4),
         totalDurationMs,
       });
       finalPath = mixedMp4;
@@ -392,13 +401,15 @@ export async function runExport(options: ExportOptions): Promise<string | null> 
 
 ## Important: strip `file://` from paths
 
-React Native's `expo-file-system` returns paths with a `file://` prefix (e.g. `file:///var/mobile/…`). AVFoundation expects plain filesystem paths. Always strip the prefix before passing to this module:
+React Native's `expo-file-system` returns paths with a `file://` prefix (e.g. `file:///var/mobile/…`), and folder names with spaces arrive percent-encoded (`My%20Clips`). The native encoders expect plain filesystem paths. Convert with `toNativePath` before passing a path to this module:
 
 ```typescript
-const path = uri.replace(/^file:\/\//, '');
+import { toNativePath } from 'expo-video-encoder';
+
+const outputPath = toNativePath(FileSystem.cacheDirectory + 'export.mp4');
 ```
 
-This is the most common source of "file not found" errors.
+A bare `uri.replace(/^file:\/\//, '')` strips the prefix but leaves `%20` in place, which points at a folder that does not exist. This is the most common source of "file not found" errors.
 
 ---
 
@@ -417,7 +428,7 @@ This is the most common source of "file not found" errors.
 ## Troubleshooting
 
 **"File not found" during encode**
-→ You passed a `file://` URI. Strip it: `path.replace(/^file:\/\//, '')`
+→ You passed a `file://` URI. Convert it with `toNativePath(path)`.
 
 **"No video track in source file"**
 → `encodeVideo` failed silently and you called `mixAudio` on a corrupt/empty file. Check that `encodeVideo` resolved `true` before calling `mixAudio`.

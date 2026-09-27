@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
 import { assertEncodeVideoOptions, assertMixAudioOptions } from './validation';
 
+export { frameFileName, frameFilePath, toNativePath } from './paths';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -99,8 +101,12 @@ export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean>
  *
  * @platform ios
  */
+export function isAudioMixSupported(): boolean {
+  return Platform.OS === 'ios';
+}
+
 export async function mixAudio(options: MixAudioOptions): Promise<boolean> {
-  if (Platform.OS !== 'ios') {
+  if (!isAudioMixSupported()) {
     throw new Error('expo-video-encoder: mixAudio is only supported on iOS.');
   }
   assertMixAudioOptions(options);
