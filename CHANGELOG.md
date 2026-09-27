@@ -24,7 +24,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Notes
 - `mixAudio` remains iOS only. On Android it throws `MIX_UNSUPPORTED`; treat it as non-fatal and fall back to the silent video from `encodeVideo`. Android audio mixing is tracked as a follow-up.
-- The Android native code has not yet been exercised on a device in CI (CI runs on macOS and validates JS + package only). Build and test on a device before cutting a release.
+- The Android native code was verified manually before release: the packed tarball was installed into a blank Expo SDK 57 app (React Native 0.86.3) and built with Gradle (`assembleRelease`, arm64-v8a) with no Kotlin errors or warnings from this module. On an Android 16 (API 36.1) arm64 emulator, `encodeVideo` turned 6 JPEG frames into playable H.264 MP4s at 320x240 (10 fps, same size as the frames) and 640x360 (30 fps, scaled up), and `ffprobe` reported 6 frames and the expected dimensions and frame rate. It has not been tested on a physical Android device. CI still covers only JS and package checks.
 
 ---
 
