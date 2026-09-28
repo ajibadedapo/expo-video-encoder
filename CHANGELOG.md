@@ -7,20 +7,11 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
-
-### Fixed
-- `npm run build` (and therefore `prepare`, which runs on `npm pack` and `npm publish`) now deletes `build/` before compiling, so stale output from older builds can no longer end up in the published tarball. The package verifier also fails if the tarball contains `build/` files with no matching `src/` module, or any `test/` files.
+## [1.1.0] - 2026-09-27
 
 ### Added
 - Unit tests for the package entry point with the native module stubbed: platform guards, `isAudioMixSupported`, validation running before any native call, and lazy one-time native module lookup. More boundary tests for option validation and path helpers.
 - `npm run typecheck`. `npm run package:check` now typechecks first, and CI runs typecheck, build, tests, and package verification as separate steps on Node 20 and 22.
-
----
-
-## [1.1.0] - 2026-09-27
-
-### Added
 - `frameFileName`, `frameFilePath`, `toNativePath`, and `isAudioMixSupported` helpers. They produce the exact `frame_000000.jpg` names the encoder reads, convert `file://` URIs (including percent-encoded folder names) to native paths, and let apps skip audio mixing where it is not implemented.
 - Typed errors. Everything the JavaScript layer rejects (bad options, bad helper arguments, unsupported platforms) is now an `ExpoVideoEncoderError` with a `code` of `INVALID_OPTIONS`, `INVALID_ARGUMENT`, or `UNSUPPORTED_PLATFORM`, and for option errors a `field` naming the exact option, such as `audioTracks[1].volume`. `isExpoVideoEncoderError(error, code?)` narrows `unknown` errors in `catch` blocks. It is still an `Error` subclass and the messages are unchanged, so existing `instanceof Error` checks and message matching keep working.
 - README: install steps for Expo (SDK 51+) and bare React Native (via `install-expo-modules`), a requirements table, a complete API reference that matches the exported TypeScript types and lists every validation rule, a native and JavaScript error code reference, and an honest limitations list.
@@ -31,6 +22,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 - The JS platform guard now allows both iOS and Android for `encodeVideo` (previously iOS only). Non-mobile platforms still throw a clear error.
 
 ### Fixed
+- `npm run build` (and therefore `prepare`, which runs on `npm pack` and `npm publish`) now deletes `build/` before compiling, so stale output from older builds can no longer end up in the published tarball. The package verifier also fails if the tarball contains `build/` files with no matching `src/` module, or any `test/` files.
 - `tsconfig.json` now compiles under TypeScript 7 (the pinned dev version): set `module`/`moduleResolution` to `node16` and added an explicit `rootDir`. A clean `npm ci` previously failed in the `prepare` step because TS 7 removed `moduleResolution: "node"`, which was breaking CI.
 - The package verifier now requires the Android native runtime files in the npm tarball before release.
 - Reject same-file output and audio input collisions even when path casing differs on common iOS volumes.
