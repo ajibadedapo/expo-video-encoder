@@ -22,6 +22,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 - `frameFileName`, `frameFilePath`, `toNativePath`, and `isAudioMixSupported` helpers. They produce the exact `frame_000000.jpg` names the encoder reads, convert `file://` URIs (including percent-encoded folder names) to native paths, and let apps skip audio mixing where it is not implemented.
+- Typed errors. Everything the JavaScript layer rejects (bad options, bad helper arguments, unsupported platforms) is now an `ExpoVideoEncoderError` with a `code` of `INVALID_OPTIONS`, `INVALID_ARGUMENT`, or `UNSUPPORTED_PLATFORM`, and for option errors a `field` naming the exact option, such as `audioTracks[1].volume`. `isExpoVideoEncoderError(error, code?)` narrows `unknown` errors in `catch` blocks. It is still an `Error` subclass and the messages are unchanged, so existing `instanceof Error` checks and message matching keep working.
+- README: install steps for Expo (SDK 51+) and bare React Native (via `install-expo-modules`), a requirements table, a complete API reference that matches the exported TypeScript types and lists every validation rule, a native and JavaScript error code reference, and an honest limitations list.
 - **Android support for `encodeVideo`** via `MediaCodec` (H.264) and `MediaMuxer`, matching the iOS output and API. Frames are decoded, converted to YUV, and queued with explicit presentation timestamps (`frame_index / fps`). Autolinking now covers Android through `expo-module.config.json`.
 
 ### Changed
@@ -32,9 +34,11 @@ This project uses [Semantic Versioning](https://semver.org/).
 - `tsconfig.json` now compiles under TypeScript 7 (the pinned dev version): set `module`/`moduleResolution` to `node16` and added an explicit `rootDir`. A clean `npm ci` previously failed in the `prepare` step because TS 7 removed `moduleResolution: "node"`, which was breaking CI.
 - The package verifier now requires the Android native runtime files in the npm tarball before release.
 - Reject same-file output and audio input collisions even when path casing differs on common iOS volumes.
+- Reject `fps` values below 1 before native work. iOS builds its frame time scale from the whole-number part of `fps`, so values such as `0.5` produced an invalid zero time scale.
+- The README no longer describes audio mixing as layering: overlapping clips have been rejected since 1.0.10, and the docs now say so. The `AudioTrack.uri` type comment now says it takes a native path, matching validation. The `mixAudio` doc comment was attached to `isAudioMixSupported` and is now on `mixAudio`.
 
 ### Notes
-- `mixAudio` remains iOS only. On Android it throws `MIX_UNSUPPORTED`; treat it as non-fatal and fall back to the silent video from `encodeVideo`. Android audio mixing is tracked as a follow-up.
+- `mixAudio` remains iOS only. On Android the JavaScript API rejects with `UNSUPPORTED_PLATFORM` before any native call (the native Android module itself rejects with `MIX_UNSUPPORTED` if reached directly); treat it as non-fatal and fall back to the silent video from `encodeVideo`. Android audio mixing is tracked as a follow-up.
 - The Android native code was verified manually before release: the packed tarball was installed into a blank Expo SDK 57 app (React Native 0.86.3) and built with Gradle (`assembleRelease`, arm64-v8a) with no Kotlin errors or warnings from this module. On an Android 16 (API 36.1) arm64 emulator, `encodeVideo` turned 6 JPEG frames into playable H.264 MP4s at 320x240 (10 fps, same size as the frames) and 640x360 (30 fps, scaled up), and `ffprobe` reported 6 frames and the expected dimensions and frame rate. It has not been tested on a physical Android device. CI still covers only JS and package checks.
 
 ---

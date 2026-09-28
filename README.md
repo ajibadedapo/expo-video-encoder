@@ -38,7 +38,7 @@ Apple ships a fully capable video encoder in every iPhone and iPad called **AVFo
 - **H.264 MP4 encoding:** industry-standard format, plays everywhere
 - **Cross-platform:** frame encoding runs on iOS (AVFoundation) and Android (MediaCodec) behind one API
 - **Frame-by-frame assembly:** snapshot your canvas, Skia surface, or any pixel source
-- **Audio mixing:** layer multiple audio tracks with independent start times and volumes (iOS today, see [Platform support](#platform-support))
+- **Audio mixing:** place up to 16 non-overlapping audio clips on the timeline, each with its own start time and volume (iOS today, see [Platform support](#platform-support))
 - **Hardware accelerated:** uses the device's built-in video encoder chip on both platforms
 - **Zero external dependencies:** no CocoaPods binary downloads, no xcframework, no surprises
 - **Expo autolinking:** install and it works, no manual native setup
@@ -112,19 +112,42 @@ JPEG is the most practical format for frame transfer between JavaScript and nati
 
 ## Installation
 
-```sh
-npm install expo-video-encoder
-# or
-yarn add expo-video-encoder
-```
+This package ships native code, so it does not run inside Expo Go. Use an Expo development build, a prebuilt Expo app, or a bare React Native app.
 
-Then regenerate your native project:
+### Expo managed or prebuild projects (SDK 51 or newer)
 
 ```sh
+npx expo install expo-video-encoder
 npx expo prebuild
 ```
 
-No `app.json` plugin is needed. Expo's autolinking detects the `expo-module.config.json` and wires up the native module automatically on both iOS and Android.
+`npx expo run:ios` and `npx expo run:android` also prebuild for you. No `app.json` config plugin is needed: Expo autolinking reads `expo-module.config.json` and wires up the native module on iOS and Android. For EAS Build, create a new development or production build after installing, because an over-the-air update cannot add native code.
+
+### Bare React Native (0.74 or newer)
+
+The module is built on the Expo Modules API, so a bare app needs Expo modules support first. If your app does not have it yet:
+
+```sh
+npx install-expo-modules@latest
+```
+
+Then install the package and the iOS pods:
+
+```sh
+npm install expo-video-encoder
+npx pod-install
+```
+
+Android picks the module up through autolinking on the next Gradle build.
+
+### Requirements
+
+| Requirement | Minimum | Source |
+|-------------|---------|--------|
+| `expo` | 51 | `peerDependencies` |
+| `react-native` | 0.74 | `peerDependencies` |
+| iOS | 13.4 | `ExpoVideoEncoder.podspec` |
+| Android | API 24 (7.0) | `android/build.gradle` default `minSdkVersion` |
 
 > **Note:** `encodeVideo` runs on iOS and Android. `mixAudio` is iOS only for now (see [Platform support](#platform-support)); on Android it throws, and since audio mixing is designed to be non-fatal, callers should fall back to the silent video. On any non-mobile platform (web) both functions throw a clear error.
 
@@ -234,57 +257,163 @@ async function captureGLFrame(gl: WebGLRenderingContext): Promise<string> {
 
 ## API reference
 
+Everything below is exported from `expo-video-encoder`:
+
+| Export | Kind | Platforms |
+|--------|------|-----------|
+| `encodeVideo` | async function | iOS, Android |
+| `mixAudio` | async function | iOS |
+| `isAudioMixSupported` | function | any (returns `false` off iOS) |
+| `frameFileName`, `frameFilePath`, `toNativePath` | functions | any (pure JavaScript) |
+| `ExpoVideoEncoderError`, `isExpoVideoEncoderError` | error class and type guard | any |
+| `EncodeVideoOptions`, `MixAudioOptions`, `AudioTrack`, `ExpoVideoEncoderErrorCode` | types | |
+
+### Types
+
+```typescript
+type EncodeVideoOptions = {
+  framesDir: string;
+  frameCount: number;
+  fps: number;
+  width: number;
+  height: number;
+  outputPath: string;
+};
+
+type AudioTrack = {
+  uri: string;
+  startMs: number;
+  durationMs: number;
+  volume: number;
+};
+
+type MixAudioOptions = {
+  videoPath: string;
+  audioTracks: AudioTrack[];
+  outputPath: string;
+  totalDurationMs: number;
+};
+
+type ExpoVideoEncoderErrorCode = 'INVALID_OPTIONS' | 'INVALID_ARGUMENT' | 'UNSUPPORTED_PLATFORM';
+
+class ExpoVideoEncoderError extends Error {
+  readonly code: ExpoVideoEncoderErrorCode;
+  readonly field: string | undefined;
+}
+
+function encodeVideo(options: EncodeVideoOptions): Promise<boolean>;
+function mixAudio(options: MixAudioOptions): Promise<boolean>;
+function isAudioMixSupported(): boolean;
+function frameFileName(index: number): string;
+function frameFilePath(framesDir: string, index: number): string;
+function toNativePath(uri: string): string;
+function isExpoVideoEncoderError(error: unknown, code?: ExpoVideoEncoderErrorCode): error is ExpoVideoEncoderError;
+```
+
+### Native paths
+
+Every path option (`framesDir`, `outputPath`, `videoPath`, and `AudioTrack.uri`) must be a plain absolute native path. It must start with `/`, must not start with `file://`, must not have leading or trailing whitespace, and must not contain `.` or `..` segments. Convert paths from `expo-file-system` with `toNativePath` first. Path comparisons (output inside `framesDir`, output equal to input, duplicate audio files) ignore letter case and trailing slashes, so the checks stay conservative on case-insensitive file systems.
+
 ### `encodeVideo(options: EncodeVideoOptions): Promise<boolean>`
 
-Assembles a directory of JPEG frames into an H.264 MP4 file.
+Assembles a directory of JPEG frames into an H.264 MP4 file. Resolves `true` on success.
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `framesDir` | `string` | ✅ | Absolute filesystem path to the directory containing frame JPEGs. Must not have a `file://` prefix. |
-| `frameCount` | `number` | ✅ | Total number of frames to encode. Frames must be named `frame_000000.jpg` … `frame_NNNNNN.jpg`. |
-| `fps` | `number` | ✅ | Output frame rate. Common values: `24`, `30`, `60`. |
-| `width` | `number` | ✅ | Output width in pixels. |
-| `height` | `number` | ✅ | Output height in pixels. |
-| `outputPath` | `string` | ✅ | Absolute filesystem path for the resulting `.mp4`. Must not have a `file://` prefix and must be outside `framesDir`. |
+| Option | Type | Rules checked before native work |
+|--------|------|----------------------------------|
+| `framesDir` | `string` | Native path (see above). Must be a directory, so it must not end in `.jpg` or `.jpeg`. |
+| `frameCount` | `number` | Positive integer. `frameCount / fps` must be one hour (3600000 ms) or less. |
+| `fps` | `number` | Finite number from 1 to 240. |
+| `width` | `number` | Even integer from 2 to 8192. |
+| `height` | `number` | Even integer from 2 to 8192. |
+| `outputPath` | `string` | Native path ending in `.mp4` (any case). Must be outside `framesDir`. |
 
-**Returns:** `Promise<boolean>`, resolves `true` on success, throws on failure.
+Behaviour:
 
-**Frame naming:** Frames must be zero-padded to 6 digits: `frame_000000.jpg`, `frame_000001.jpg`, etc. Gaps in the sequence are skipped, but at least one readable frame must be appended before export can succeed.
+- Frames are read as `framesDir/frame_000000.jpg` up to `frame_{frameCount - 1}` (six digit zero padding). Use `frameFileName(i)` or `frameFilePath(dir, i)` to produce those names.
+- Frame `i` is shown at `i / fps` seconds. Missing or unreadable frames are skipped, but at least one readable frame is required, otherwise the promise rejects with `ENCODE_ERROR`.
+- Each frame is scaled to `width` x `height`. Aspect ratio is not preserved, so capture frames at the output size or the same aspect ratio.
+- An existing file at `outputPath` is replaced.
+- Whole-number `fps` gives identical timing on both platforms. Fractional values such as `29.97` pass validation, but iOS truncates the time scale to a whole number (`29.97` is timed as 29 fps) while Android uses microsecond timestamps.
 
----
+### `mixAudio(options: MixAudioOptions): Promise<boolean>`
+
+Mixes audio clips onto an existing silent MP4 and writes a new MP4. Resolves `true` on success.
+
+> **iOS only for now.** On other platforms it rejects with `UNSUPPORTED_PLATFORM` before any native call. Check `isAudioMixSupported()` first, and treat any failure as non-fatal by falling back to the silent video (the pipeline example below does this).
+
+| Option | Type | Rules checked before native work |
+|--------|------|----------------------------------|
+| `videoPath` | `string` | Native path ending in `.mp4`. |
+| `audioTracks` | `AudioTrack[]` | 1 to 16 tracks. Tracks must not overlap in time (back to back is fine) and must use different files. |
+| `outputPath` | `string` | Native path ending in `.mp4`. Must be different from `videoPath`. An existing file is replaced. |
+| `totalDurationMs` | `number` | Positive integer, 3600000 (one hour) or less. Sets the export time range. |
+
+#### `AudioTrack`
+
+| Field | Type | Rules checked before native work |
+|-------|------|----------------------------------|
+| `uri` | `string` | Native path (despite the name, `file://` URIs are rejected) ending in `.aac`, `.caf`, `.m4a`, `.mp3`, or `.wav` (any case). |
+| `startMs` | `number` | Integer, 0 or greater. Where the clip starts in the output. |
+| `durationMs` | `number` | Positive integer. How much of the clip to use, from its start. `startMs + durationMs` must be `totalDurationMs` or less. |
+| `volume` | `number` | From `0` (silent) to `1` (full). |
+
+On iOS, a track whose file has no readable audio is skipped rather than failing the export.
+
+### `isAudioMixSupported(): boolean`
+
+`true` where `mixAudio` is implemented (iOS today). Use it to skip the audio step instead of catching an error.
 
 ### Path and frame helpers
 
 | Function | Returns | Description |
 |---|---|---|
-| `frameFileName(index)` | `string` | The file name the encoder reads for a frame, e.g. `frameFileName(7)` is `frame_000007.jpg`. Throws for indexes outside 0 to 999999. |
-| `frameFilePath(framesDir, index)` | `string` | `framesDir` (plain path or `file://` URI) joined with `frameFileName(index)`, as a native path. |
-| `toNativePath(uri)` | `string` | Strips `file://`, decodes percent-encoding, and returns a plain absolute path. Plain paths pass through unchanged. |
-| `isAudioMixSupported()` | `boolean` | `true` where `mixAudio` is implemented (iOS today). Use it to skip the audio step instead of catching an error. |
+| `frameFileName(index)` | `string` | The file name the encoder reads for a frame, e.g. `frameFileName(7)` is `frame_000007.jpg`. Throws `INVALID_ARGUMENT` for anything but an integer from 0 to 999999. |
+| `frameFilePath(framesDir, index)` | `string` | `framesDir` (plain path or `file://` URI) joined with `frameFileName(index)`, as a native path. Trailing slashes on `framesDir` are ignored. |
+| `toNativePath(uri)` | `string` | Trims whitespace, strips `file://` (and `file://localhost`), decodes percent-encoding, and returns a plain absolute path. Plain paths pass through trimmed. Throws `INVALID_ARGUMENT` for an empty string or broken percent-encoding. |
 
-### `mixAudio(options: MixAudioOptions): Promise<boolean>`
+### Errors
 
-Mixes one or more audio tracks onto an existing silent MP4.
+Problems this package can detect in JavaScript are thrown (or, from the async functions, rejected) as `ExpoVideoEncoderError` before any native work starts:
 
-> **iOS only for now.** On Android this throws; treat it as non-fatal and fall back to the silent video (the example below already does). See [Platform support](#platform-support).
+| `code` | When | `field` |
+|--------|------|---------|
+| `INVALID_OPTIONS` | An `encodeVideo` or `mixAudio` option breaks a rule listed above. | The option path, such as `'fps'`, `'outputPath'`, or `'audioTracks[1].volume'`. `undefined` when the options value itself is not an object. |
+| `INVALID_ARGUMENT` | A path or frame helper received a value it cannot use. | `undefined` |
+| `UNSUPPORTED_PLATFORM` | `encodeVideo` off iOS and Android, or `mixAudio` off iOS. | `undefined` |
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `videoPath` | `string` | ✅ | Absolute path to the source (silent) MP4. No `file://` prefix. |
-| `audioTracks` | `AudioTrack[]` | ✅ | Tracks to mix in. |
-| `outputPath` | `string` | ✅ | Absolute path for the mixed output MP4. No `file://` prefix. |
-| `totalDurationMs` | `number` | ✅ | Total video duration in milliseconds. Used to set the export time range. |
+Failures inside the native encoder are rejected by Expo Modules as errors with a string `code`, not as `ExpoVideoEncoderError`:
 
-**Returns:** `Promise<boolean>`, resolves `true` on success, throws on failure. Treat failure as non-fatal, fall back to the silent video.
+| Native `code` | When |
+|---------------|------|
+| `INVALID_ARGS` | The native side could not read the options (normally caught earlier by `INVALID_OPTIONS`). |
+| `ENCODE_ERROR` | Frame encoding failed, for example no readable frames or a writer failure. |
+| `MIX_ERROR` | iOS audio mixing failed, for example the video has no video track or the export failed. |
+| `MIX_UNSUPPORTED` | The Android native module was called for `mixAudio` directly. The JavaScript API rejects with `UNSUPPORTED_PLATFORM` first. |
 
-#### `AudioTrack`
+```typescript
+import { encodeVideo, isExpoVideoEncoderError } from 'expo-video-encoder';
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `uri` | `string` | URI or absolute filesystem path to the audio file (MP3, M4A, AAC, WAV). |
-| `startMs` | `number` | Millisecond offset from the start of the video at which this clip begins. |
-| `durationMs` | `number` | How many milliseconds of the clip to use. |
-| `volume` | `number` | Volume multiplier: `0.0` (silent) to `1.0` (full). |
+try {
+  await encodeVideo(options);
+} catch (error) {
+  if (isExpoVideoEncoderError(error, 'INVALID_OPTIONS')) {
+    console.warn(`Fix ${error.field}: ${error.message}`);
+  } else {
+    throw error;
+  }
+}
+```
+
+Error messages are meant for developers and may be reworded in minor releases. Match on `code` and `field`, not on message text.
+
+### Limitations
+
+- Input is JPEG files on disk with the fixed `frame_000000.jpg` naming. There is no in-memory or PNG input.
+- Output is H.264 in MP4 only. The bitrate is derived from `width * height * fps / 8` and cannot be configured yet.
+- There is no progress reporting or cancellation. The promise settles when encoding finishes.
+- Audio mixing is iOS only, and overlapping clips (for example narration over music) are rejected. Mix overlapping audio into one file first.
+- Web and other platforms are not supported.
+- Android encoding has been verified on an emulator (see the 1.1.0 notes in [CHANGELOG.md](./CHANGELOG.md)), not yet on a physical Android device. CI covers the JavaScript layer and package contents, not native builds.
 
 ---
 
@@ -297,7 +426,6 @@ import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { encodeVideo, frameFileName, isAudioMixSupported, mixAudio, toNativePath } from 'expo-video-encoder';
-import { Platform } from 'react-native';
 
 type ExportOptions = {
   frameCount: number;
@@ -317,8 +445,6 @@ type ExportOptions = {
 };
 
 export async function runExport(options: ExportOptions): Promise<string | null> {
-  if (Platform.OS !== 'ios') throw new Error('Video export requires iOS');
-
   const {
     frameCount, fps, width, height,
     captureFrame, audioTracks = [],
@@ -434,7 +560,7 @@ A bare `uri.replace(/^file:\/\//, '')` strips the prefix but leaves `%20` in pla
 → `encodeVideo` failed silently and you called `mixAudio` on a corrupt/empty file. Check that `encodeVideo` resolved `true` before calling `mixAudio`.
 
 **Frames appear in wrong order**
-→ Frame files must be named with zero-padded numbers: `frame_000000.jpg`, not `frame_0.jpg`. Use `String(i).padStart(6, '0')`.
+→ Frame files must be named with zero-padded numbers: `frame_000000.jpg`, not `frame_0.jpg`. Use `frameFileName(i)`.
 
 **Black frames in output**
 → Your canvas wasn't done rendering when you took the snapshot. Add `await new Promise(r => requestAnimationFrame(r))` before each snapshot.

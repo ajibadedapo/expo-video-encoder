@@ -95,6 +95,7 @@ test('encodeVideo resolves to whatever the native module resolves', async () => 
 test('encodeVideo rejects on unsupported platforms without touching native code', async () => {
   platform.OS = 'web';
   await assert.rejects(encoder.encodeVideo(validEncodeOptions()), /encodeVideo is only supported on iOS and Android/);
+  await assert.rejects(encoder.encodeVideo(validEncodeOptions()), (error) => encoder.isExpoVideoEncoderError(error, 'UNSUPPORTED_PLATFORM'));
   assert.deepEqual(nativeCalls, []);
 });
 
@@ -114,9 +115,25 @@ for (const os of ['android', 'web']) {
   test(`mixAudio rejects on ${os} without touching native code`, async () => {
     platform.OS = os;
     await assert.rejects(encoder.mixAudio(validMixOptions()), /mixAudio is only supported on iOS/);
+    await assert.rejects(encoder.mixAudio(validMixOptions()), (error) => encoder.isExpoVideoEncoderError(error, 'UNSUPPORTED_PLATFORM'));
     assert.deepEqual(nativeCalls, []);
   });
 }
+
+test('invalid options reject as ExpoVideoEncoderError with the field name', async () => {
+  await assert.rejects(encoder.encodeVideo({ ...validEncodeOptions(), fps: 0.5 }), (error) => {
+    assert.ok(error instanceof encoder.ExpoVideoEncoderError);
+    assert.equal(error.code, 'INVALID_OPTIONS');
+    assert.equal(error.field, 'fps');
+    return true;
+  });
+  await assert.rejects(encoder.mixAudio({ ...validMixOptions(), outputPath: '/tmp/video.mp4' }), (error) => {
+    assert.equal(error.code, 'INVALID_OPTIONS');
+    assert.equal(error.field, 'outputPath');
+    return true;
+  });
+  assert.deepEqual(nativeCalls, []);
+});
 
 test('mixAudio rejects invalid options before native work', async () => {
   await assert.rejects(encoder.mixAudio({ ...validMixOptions(), totalDurationMs: 999 }), /must fit within totalDurationMs/);

@@ -26,6 +26,8 @@ if (pack.status !== 0) {
     "build/validation.js",
     "build/paths.d.ts",
     "build/paths.js",
+    "build/errors.d.ts",
+    "build/errors.js",
     "android/build.gradle",
     "android/src/main/AndroidManifest.xml",
     "android/src/main/java/expo/modules/videoencoder/VideoEncoderModule.kt",
@@ -38,6 +40,7 @@ if (pack.status !== 0) {
     "README.md",
     "src/index.ts",
     "src/paths.ts",
+    "src/errors.ts",
     "src/validation.ts",
   ];
   for (const file of required) {

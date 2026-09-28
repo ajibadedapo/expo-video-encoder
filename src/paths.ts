@@ -1,16 +1,18 @@
+import { ExpoVideoEncoderError } from './errors';
+
 const maxFrameIndex = 999_999;
 const fileSchemePattern = /^file:\/\//i;
 
 export function frameFileName(index: number): string {
   if (!Number.isInteger(index) || index < 0 || index > maxFrameIndex) {
-    throw new Error(`expo-video-encoder: frame index must be an integer from 0 to ${maxFrameIndex}.`);
+    throw new ExpoVideoEncoderError('INVALID_ARGUMENT', `expo-video-encoder: frame index must be an integer from 0 to ${maxFrameIndex}.`);
   }
   return `frame_${String(index).padStart(6, '0')}.jpg`;
 }
 
 export function toNativePath(uri: string): string {
   if (typeof uri !== 'string' || uri.trim().length === 0) {
-    throw new Error('expo-video-encoder: toNativePath needs a non-empty path or file:// URI.');
+    throw new ExpoVideoEncoderError('INVALID_ARGUMENT', 'expo-video-encoder: toNativePath needs a non-empty path or file:// URI.');
   }
   const trimmed = uri.trim();
   if (!fileSchemePattern.test(trimmed)) return trimmed;
@@ -19,7 +21,7 @@ export function toNativePath(uri: string): string {
   try {
     return decodeURIComponent(absolute);
   } catch {
-    throw new Error('expo-video-encoder: toNativePath received a file:// URI with invalid percent-encoding.');
+    throw new ExpoVideoEncoderError('INVALID_ARGUMENT', 'expo-video-encoder: toNativePath received a file:// URI with invalid percent-encoding.');
   }
 }
 

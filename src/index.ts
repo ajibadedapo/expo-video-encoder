@@ -1,8 +1,11 @@
 import { Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
+import { ExpoVideoEncoderError } from './errors';
 import { assertEncodeVideoOptions, assertMixAudioOptions } from './validation';
 
 export { frameFileName, frameFilePath, toNativePath } from './paths';
+export { ExpoVideoEncoderError, isExpoVideoEncoderError } from './errors';
+export type { ExpoVideoEncoderErrorCode } from './errors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,7 +31,7 @@ export type EncodeVideoOptions = {
  * A single audio track to mix into the exported video.
  */
 export type AudioTrack = {
-  /** URI or absolute filesystem path to the audio file. */
+  /** Absolute filesystem path to the audio file, without a file:// prefix. */
   uri: string;
   /** Millisecond offset from the start of the video at which this track begins. */
   startMs: number;
@@ -55,7 +58,7 @@ export type MixAudioOptions = {
 // ─── Platform guard ───────────────────────────────────────────────────────────
 
 function unsupported(fn: string): never {
-  throw new Error(`expo-video-encoder: ${fn} is only supported on iOS and Android.`);
+  throw new ExpoVideoEncoderError('UNSUPPORTED_PLATFORM', `expo-video-encoder: ${fn} is only supported on iOS and Android.`);
 }
 
 function isSupportedPlatform(): boolean {
@@ -89,6 +92,10 @@ export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean>
   return getNative()!.encodeVideo(options);
 }
 
+export function isAudioMixSupported(): boolean {
+  return Platform.OS === 'ios';
+}
+
 /**
  * Mixes one or more audio tracks onto an existing silent MP4 using
  * AVMutableComposition + AVAssetExportSession.
@@ -101,13 +108,9 @@ export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean>
  *
  * @platform ios
  */
-export function isAudioMixSupported(): boolean {
-  return Platform.OS === 'ios';
-}
-
 export async function mixAudio(options: MixAudioOptions): Promise<boolean> {
   if (!isAudioMixSupported()) {
-    throw new Error('expo-video-encoder: mixAudio is only supported on iOS.');
+    throw new ExpoVideoEncoderError('UNSUPPORTED_PLATFORM', 'expo-video-encoder: mixAudio is only supported on iOS.');
   }
   assertMixAudioOptions(options);
   return getNative()!.mixAudio(options);
