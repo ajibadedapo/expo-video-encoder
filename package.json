@@ -16,10 +16,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"require('fs').rmSync('build', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc",
+    "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
-    "package:check": "npm run build && npm test && node scripts/verify-package.mjs",
-    "prepare": "tsc"
+    "package:check": "npm run typecheck && npm run build && npm test && node scripts/verify-package.mjs",
+    "prepare": "npm run build"
   },
   "keywords": [
     "expo",

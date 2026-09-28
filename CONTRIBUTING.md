@@ -67,13 +67,11 @@ Use a descriptive branch name: `feat/...` for features, `fix/...` for bug fixes,
 ### 5. Make your changes and validate locally
 
 ```sh
-npm install
-npm run build          # compile src/ to build/
-npm test               # run the test suite
-npm run package:check  # build + test + verify the published package
+npm ci
+npm run package:check  # typecheck + build + test + verify the published package
 ```
 
-Please run `npm run package:check` before opening a PR. It is the same gate CI runs, so passing it locally means CI should pass too.
+Please run `npm run package:check` before opening a PR. It runs the same steps as the Build workflow. The Android workflow additionally compiles the Kotlin module inside a fresh Expo app. See [Development setup](#development-setup) for running the module on a device.
 
 ### 6. Commit and push to your fork
 
@@ -105,35 +103,61 @@ git push --force-with-lease origin feat/android-support
 
 ### Prerequisites
 
-- macOS (required for iOS native development)
-- Xcode 14+
-- Node.js 18+
-- Yarn or npm
-- An Expo project to test against (React Native 0.74+, Expo SDK 51+)
+- Node.js 20 or 22 (the versions CI runs)
+- npm (the repo ships a `package-lock.json`, so use `npm ci` for a clean install)
+- For iOS native work: macOS with Xcode
+- For Android native work: JDK 17 and the Android SDK (Android Studio is the easiest way to get both)
+- A host Expo app to run the module in (Expo SDK 51+, React Native 0.74+). Expo Go cannot load this module; you need a development build.
 
-### Linking to a local Expo project for testing
-
-In your test app's `package.json`:
-
-```json
-{
-  "dependencies": {
-    "expo-video-encoder": "file:../expo-video-encoder"
-  }
-}
-```
-
-Then run `npx expo prebuild` in the test app to pick up your local version.
-
-### Editing the native module
-
-Changes to `ios/VideoEncoderModule.swift` take effect after `npx expo prebuild` and rebuilding the Xcode project. Open `ios/YourApp.xcworkspace` in Xcode for the fastest native iteration loop.
-
-### Editing the TypeScript API
+### Everyday commands
 
 ```sh
-npm run build  # compiles src/ to build/
+npm ci
+npm run typecheck      # tsc --noEmit over src/
+npm run build          # clean build/ and compile src/ to build/
+npm test               # unit tests against build/, no device needed
+npm run package:check  # typecheck + build + test + tarball verification (what CI runs)
 ```
+
+`npm test` runs the compiled output in `build/`, so run `npm run build` first after editing `src/`.
+
+### Unit tests
+
+Tests live in `test/*.test.mjs` and use the built-in `node:test` runner, so there are no test dependencies to install.
+
+- `test/paths.test.mjs` and `test/boundaries.test.mjs` cover the path helpers (`frameFileName`, `frameFilePath`, `toNativePath`) and the option validation in `src/validation.ts`, including limits and edge cases.
+- `test/validation.test.mjs` covers the rejection paths that protect native code from unsafe input.
+- `test/index.test.mjs` loads the real package entry with `react-native` and `expo-modules-core` replaced by in-memory stubs. It checks the platform guards, `isAudioMixSupported`, that invalid options are rejected before the native module is called, and that valid options reach it unchanged.
+
+These tests do not exercise AVFoundation or MediaCodec. Native behavior still needs a run in a host app, described below.
+
+### Package verification
+
+`scripts/verify-package.mjs` runs `npm pack --dry-run` and fails if the tarball is missing a runtime file (JS build, Swift, Kotlin, podspec, autolinking config), includes development files (`test/`, `scripts/`, `.github/`, the lockfile), includes `build/` output with no matching `src/` module, or if `package-lock.json` has a different version from `package.json`.
+
+### Running the module in a host app
+
+There is no example app in this repository. Use a throwaway Expo app next to your clone, the same way the Android CI job does:
+
+```sh
+cd expo-video-encoder && npm ci && npm pack && cd ..
+npx create-expo-app@latest host --template blank
+cd host
+npm install ../expo-video-encoder/expo-video-encoder-*.tgz
+npx expo prebuild
+npx expo run:ios       # or: npx expo run:android
+```
+
+Installing the packed tarball tests exactly what npm users get. For a faster edit loop, depend on the folder instead (`"expo-video-encoder": "file:../expo-video-encoder"`) and rerun `npx expo prebuild` after native changes.
+
+To exercise the API, write JPEGs named with `frameFileName(i)` into a cache folder (for example with `expo-file-system`), pass the folder through `toNativePath`, and call `encodeVideo`. Guard `mixAudio` with `isAudioMixSupported()`. The README has a full walkthrough.
+
+### Editing the native code
+
+- iOS: `ios/VideoEncoderModule.swift`. After `npx expo prebuild`, open `host/ios/*.xcworkspace` in Xcode for the fastest iteration loop.
+- Android: `android/src/main/java/expo/modules/videoencoder/VideoEncoderModule.kt`. Open `host/android` in Android Studio, or compile the module alone with `./gradlew :expo-video-encoder:compileDebugKotlin`.
+
+When you change native behavior, say in the PR which platform, device or simulator, and OS version you ran it on.
 
 ---
 
@@ -142,15 +166,20 @@ npm run build  # compiles src/ to build/
 ```
 expo-video-encoder/
 ├── src/
-│   └── index.ts                  TypeScript JS/TS API (types + requireNativeModule)
+│   ├── index.ts                  Public API, platform guards, native module binding
+│   ├── paths.ts                  frameFileName, frameFilePath, toNativePath
+│   └── validation.ts             Option validation that runs before native work
 ├── ios/
-│   └── VideoEncoderModule.swift  AVFoundation implementation (Swift)
-├── test/                         node:test suites
-├── scripts/                      package verification tooling
+│   └── VideoEncoderModule.swift  AVFoundation implementation (encodeVideo, mixAudio)
+├── android/
+│   ├── build.gradle
+│   └── src/main/java/expo/modules/videoencoder/
+│       └── VideoEncoderModule.kt MediaCodec + MediaMuxer implementation (encodeVideo)
+├── test/                         node:test suites (not published)
+├── scripts/verify-package.mjs    npm tarball verification (not published)
+├── .github/workflows/            Build (JS + package) and Android (Gradle compile) CI
 ├── ExpoVideoEncoder.podspec      CocoaPods podspec
 ├── expo-module.config.json       Expo autolinking config
-├── package.json
-├── tsconfig.json
 └── build/                        Compiled output (generated, not committed)
 ```
 
@@ -192,7 +221,8 @@ Open an issue at https://github.com/ajibadedapo/expo-video-encoder/issues and in
 - `expo-video-encoder` version
 - Expo SDK version
 - React Native version
-- iOS version and device (simulator or physical)
+- Platform (iOS or Android), OS version, and device (physical, simulator, or emulator)
+- The options you passed to `encodeVideo` or `mixAudio`
 - A minimal reproduction (ideally a Snack or small repo)
 - The full error message and stack trace
 

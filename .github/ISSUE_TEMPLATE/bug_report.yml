@@ -15,8 +15,31 @@ body:
           required: true
         - label: I searched existing issues and did not find a duplicate.
           required: true
-        - label: I am running on iOS (this module is iOS only).
+        - label: I am running on iOS or Android (web and other platforms are not supported).
           required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iOS
+        - Android
+        - Both iOS and Android
+    validations:
+      required: true
+  - type: dropdown
+    id: api
+    attributes:
+      label: Affected function
+      options:
+        - encodeVideo
+        - mixAudio
+        - Path helpers (frameFileName, frameFilePath, toNativePath)
+        - isAudioMixSupported
+        - Install, autolinking, or native build
+        - Other
+    validations:
+      required: true
   - type: textarea
     id: description
     attributes:
@@ -51,7 +74,7 @@ body:
     id: package-version
     attributes:
       label: expo-video-encoder version
-      placeholder: e.g. 1.0.23
+      placeholder: e.g. 1.1.0
     validations:
       required: true
   - type: input
@@ -69,12 +92,37 @@ body:
     validations:
       required: true
   - type: input
-    id: ios-version
+    id: os-version
     attributes:
-      label: iOS version and device
-      placeholder: e.g. iOS 17.5, iPhone 14 (physical) or simulator
+      label: OS version
+      placeholder: e.g. iOS 17.5, or Android 14 (API 34)
     validations:
       required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Model, and whether it is a physical device, simulator, or emulator. On Android, the SoC or GPU helps with encoder bugs.
+      placeholder: e.g. iPhone 14 (physical), or Pixel 8 emulator arm64
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Build type
+      options:
+        - Development build (npx expo run:ios / run:android)
+        - EAS or other cloud build
+        - Bare React Native
+        - Expo Go (not supported, native modules need a development build)
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Call options
+      description: The options object you passed (frameCount, fps, width, height, audio tracks), and the size of your source JPEG frames. Redact private paths if needed.
+      render: json
   - type: textarea
     id: context
     attributes:

@@ -9,6 +9,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `npm run build` (and therefore `prepare`, which runs on `npm pack` and `npm publish`) now deletes `build/` before compiling, so stale output from older builds can no longer end up in the published tarball. The package verifier also fails if the tarball contains `build/` files with no matching `src/` module, or any `test/` files.
+
+### Added
+- Unit tests for the package entry point with the native module stubbed: platform guards, `isAudioMixSupported`, validation running before any native call, and lazy one-time native module lookup. More boundary tests for option validation and path helpers.
+- `npm run typecheck`. `npm run package:check` now typechecks first, and CI runs typecheck, build, tests, and package verification as separate steps on Node 20 and 22.
+
 ---
 
 ## [1.1.0] - 2026-09-27

@@ -18,11 +18,13 @@
 
 ## How was this tested?
 
-<!-- Describe how you verified the change. For native changes, note the device
-     or simulator and iOS version you tested on. -->
+<!-- Describe how you verified the change. For native changes, note the platform,
+     device, simulator or emulator, and OS version you tested on. -->
 
-- [ ] `npm run package:check` passes locally
-- [ ] Tested in a real Expo project (native changes)
+- [ ] `npm run package:check` passes locally (typecheck, build, tests, package verification)
+- [ ] New or changed validation and helpers are covered in `test/`
+- [ ] Tested in a real Expo project on iOS (native iOS changes)
+- [ ] Tested in a real Expo project on Android (native Android changes)
 
 ## Checklist
 

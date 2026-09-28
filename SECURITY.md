@@ -29,7 +29,7 @@ Please include as much of the following as you can:
 - A description of the issue and the impact you believe it has.
 - The version of `expo-video-encoder` affected.
 - Steps to reproduce, or a proof of concept.
-- Any relevant iOS version, device, and Expo/React Native versions.
+- The platform (iOS or Android), OS version, device, and Expo/React Native versions.
 
 ## What to expect
 

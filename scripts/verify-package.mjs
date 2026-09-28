@@ -37,6 +37,7 @@ if (pack.status !== 0) {
     "package.json",
     "README.md",
     "src/index.ts",
+    "src/paths.ts",
     "src/validation.ts",
   ];
   for (const file of required) {
@@ -44,8 +45,19 @@ if (pack.status !== 0) {
   }
   const unexpected = entry.files
     .map((file) => file.path)
-    .filter((file) => file.startsWith(".github/") || file.startsWith("scripts/") || file === "package-lock.json");
+    .filter((file) => file.startsWith(".github/") || file.startsWith("scripts/") || file.startsWith("test/") || file === "package-lock.json");
   if (unexpected.length > 0) failures.push(`npm tarball includes non-runtime files: ${unexpected.join(", ")}`);
+  const sourceModules = new Set(
+    entry.files
+      .map((file) => file.path)
+      .filter((file) => /^src\/[^/]+\.ts$/.test(file))
+      .map((file) => file.slice("src/".length, -".ts".length)),
+  );
+  const staleBuildFiles = entry.files
+    .map((file) => file.path)
+    .filter((file) => file.startsWith("build/"))
+    .filter((file) => !sourceModules.has(file.slice("build/".length).replace(/\.(d\.ts|js)$/, "")));
+  if (staleBuildFiles.length > 0) failures.push(`npm tarball includes build output with no matching src module: ${staleBuildFiles.join(", ")}`);
 }
 
 if (failures.length > 0) {
