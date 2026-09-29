@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Video Encoder Example",
+    "slug": "expo-video-encoder-example",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "dev.expovideoencoder.example",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "dev.expovideoencoder.example"
+    },
+    "plugins": [
+      "expo-video"
+    ]
+  }
+}

@@ -48,7 +48,7 @@ if (pack.status !== 0) {
   }
   const unexpected = entry.files
     .map((file) => file.path)
-    .filter((file) => file.startsWith(".github/") || file.startsWith("scripts/") || file.startsWith("test/") || file === "package-lock.json");
+    .filter((file) => file.startsWith(".github/") || file.startsWith("example/") || file.startsWith("scripts/") || file.startsWith("test/") || file === "package-lock.json");
   if (unexpected.length > 0) failures.push(`npm tarball includes non-runtime files: ${unexpected.join(", ")}`);
   const sourceModules = new Set(
     entry.files

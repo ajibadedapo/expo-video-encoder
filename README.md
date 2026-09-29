@@ -552,6 +552,20 @@ export async function runExport(options: ExportOptions): Promise<string | null> 
 
 ---
 
+## Example app
+
+[`example/`](./example) is a runnable Expo app. It draws 60 JPEG frames in JavaScript, checks them with `findMissingFrames`, encodes a 2 second MP4 with `encodeVideo`, mixes in a generated tone with `mixAudio` on iOS, plays the result, and shows the typed error for an invalid width. The encoding code is in [`example/src/pipeline.ts`](./example/src/pipeline.ts).
+
+```sh
+npm ci
+cd example && npm ci
+npm run ios        # or: npm run android
+```
+
+It needs a development build, because Expo Go cannot load this module. See [CONTRIBUTING.md](./CONTRIBUTING.md#running-the-example-app) for details.
+
+---
+
 ## Important: strip `file://` from paths
 
 React Native's `expo-file-system` returns paths with a `file://` prefix (e.g. `file:///var/mobile/…`), and folder names with spaces arrive percent-encoded (`My%20Clips`). The native encoders expect plain filesystem paths. Convert with `toNativePath` before passing a path to this module:
@@ -597,6 +611,9 @@ A bare `uri.replace(/^file:\/\//, '')` strips the prefix but leaves `%20` in pla
 
 **Module not found after install**
 → Run `npx expo prebuild` to regenerate the native project so autolinking can wire up the module.
+
+**iOS: "Cannot find native module 'VideoEncoder'"**
+→ Versions up to 1.0.23 keep the podspec at the package root without telling Expo autolinking where it is, so the pod is installed but the module is never registered on iOS. Upgrade to 1.1.0 or later, then run `npx expo prebuild --clean` (or `pod install` in bare projects).
 
 **Build error: "No such module ExpoModulesCore"**
 → `ExpoModulesCore` is a peer dependency. Make sure `expo` is installed and `npx expo prebuild` has been run.

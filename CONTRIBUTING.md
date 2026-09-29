@@ -127,17 +127,33 @@ Tests live in `test/*.test.mjs` and use the built-in `node:test` runner, so ther
 
 - `test/paths.test.mjs` and `test/boundaries.test.mjs` cover the path helpers (`frameFileName`, `frameFilePath`, `toNativePath`) and the option validation in `src/validation.ts`, including limits and edge cases.
 - `test/validation.test.mjs` covers the rejection paths that protect native code from unsafe input.
+- `test/autolinking.test.mjs` checks `expo-module.config.json` against the podspec, the Swift and Kotlin module classes, and the `VideoEncoder` name the JavaScript layer requires. Expo autolinking only finds a podspec one folder deep, so the root `ExpoVideoEncoder.podspec` must stay listed as `ios.podspecPath`.
 - `test/index.test.mjs` loads the real package entry with `react-native` and `expo-modules-core` replaced by in-memory stubs. It checks the platform guards, `isAudioMixSupported`, that invalid options are rejected before the native module is called, and that valid options reach it unchanged.
 
 These tests do not exercise AVFoundation or MediaCodec. Native behavior still needs a run in a host app, described below.
 
 ### Package verification
 
-`scripts/verify-package.mjs` runs `npm pack --dry-run` and fails if the tarball is missing a runtime file (JS build, Swift, Kotlin, podspec, autolinking config), includes development files (`test/`, `scripts/`, `.github/`, the lockfile), includes `build/` output with no matching `src/` module, or if `package-lock.json` has a different version from `package.json`.
+`scripts/verify-package.mjs` runs `npm pack --dry-run` and fails if the tarball is missing a runtime file (JS build, Swift, Kotlin, podspec, autolinking config), includes development files (`test/`, `scripts/`, `.github/`, `example/`, the lockfile), includes `build/` output with no matching `src/` module, or if `package-lock.json` has a different version from `package.json`.
 
-### Running the module in a host app
+### Running the example app
 
-There is no example app in this repository. Use a throwaway Expo app next to your clone, the same way the Android CI job does:
+`example/` is an Expo app that exercises the whole API on a simulator, emulator or device. It depends on the repository root through `"expo-video-encoder": "file:.."`, and its `metro.config.js` resolves every package from `example/node_modules` so the root dev dependencies never load twice. Expo Go cannot load the module, so it runs as a development build:
+
+```sh
+npm ci                  # at the repo root, also builds build/
+cd example
+npm ci
+npm run ios             # expo run:ios, or: npm run android
+```
+
+The screen draws 60 JPEG frames in JavaScript, runs `findMissingFrames`, `encodeVideo`, and on iOS `mixAudio` with a generated tone, then plays the MP4. A second button passes an odd width to show an `INVALID_OPTIONS` error with its `field`.
+
+- After editing `src/`, run `npm run build` at the root and reload the app.
+- After editing Swift, Kotlin, the podspec or `expo-module.config.json`, run `npx expo prebuild --clean` in `example/` and rebuild.
+- `npm run typecheck` and `npm run bundle` in `example/` are what the CI example job runs. They catch API drift without a device.
+
+To test exactly what npm users get, install the packed tarball into a throwaway app instead, the same way the Android CI job does:
 
 ```sh
 cd expo-video-encoder && npm ci && npm pack && cd ..
@@ -147,10 +163,6 @@ npm install ../expo-video-encoder/expo-video-encoder-*.tgz
 npx expo prebuild
 npx expo run:ios       # or: npx expo run:android
 ```
-
-Installing the packed tarball tests exactly what npm users get. For a faster edit loop, depend on the folder instead (`"expo-video-encoder": "file:../expo-video-encoder"`) and rerun `npx expo prebuild` after native changes.
-
-To exercise the API, write JPEGs named with `frameFileName(i)` into a cache folder (for example with `expo-file-system`), pass the folder through `toNativePath`, and call `encodeVideo`. Guard `mixAudio` with `isAudioMixSupported()`. The README has a full walkthrough.
 
 ### Editing the native code
 
