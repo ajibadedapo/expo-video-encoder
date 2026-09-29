@@ -1,6 +1,7 @@
 {
   "platforms": ["ios", "android"],
   "ios": {
+    "podspecPath": "ExpoVideoEncoder.podspec",
     "modules": ["VideoEncoderModule"]
   },
   "android": {
