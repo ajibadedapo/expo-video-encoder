@@ -265,8 +265,9 @@ Everything below is exported from `expo-video-encoder`:
 | `mixAudio` | async function | iOS |
 | `isAudioMixSupported` | function | any (returns `false` off iOS) |
 | `frameFileName`, `frameFilePath`, `toNativePath` | functions | any (pure JavaScript) |
+| `findMissingFrames` | async function | any (you supply the file check) |
 | `ExpoVideoEncoderError`, `isExpoVideoEncoderError` | error class and type guard | any |
-| `EncodeVideoOptions`, `MixAudioOptions`, `AudioTrack`, `ExpoVideoEncoderErrorCode` | types | |
+| `EncodeVideoOptions`, `MixAudioOptions`, `AudioTrack`, `FrameExistsCheck`, `ExpoVideoEncoderErrorCode` | types | |
 
 ### Types
 
@@ -294,6 +295,8 @@ type MixAudioOptions = {
   totalDurationMs: number;
 };
 
+type FrameExistsCheck = (path: string, index: number) => boolean | Promise<boolean>;
+
 type ExpoVideoEncoderErrorCode = 'INVALID_OPTIONS' | 'INVALID_ARGUMENT' | 'UNSUPPORTED_PLATFORM';
 
 class ExpoVideoEncoderError extends Error {
@@ -307,6 +310,7 @@ function isAudioMixSupported(): boolean;
 function frameFileName(index: number): string;
 function frameFilePath(framesDir: string, index: number): string;
 function toNativePath(uri: string): string;
+function findMissingFrames(framesDir: string, frameCount: number, frameExists: FrameExistsCheck): Promise<number[]>;
 function isExpoVideoEncoderError(error: unknown, code?: ExpoVideoEncoderErrorCode): error is ExpoVideoEncoderError;
 ```
 
@@ -330,7 +334,7 @@ Assembles a directory of JPEG frames into an H.264 MP4 file. Resolves `true` on 
 Behaviour:
 
 - Frames are read as `framesDir/frame_000000.jpg` up to `frame_{frameCount - 1}` (six digit zero padding). Use `frameFileName(i)` or `frameFilePath(dir, i)` to produce those names.
-- Frame `i` is shown at `i / fps` seconds. Missing or unreadable frames are skipped, but at least one readable frame is required, otherwise the promise rejects with `ENCODE_ERROR`.
+- Frame `i` is shown at `i / fps` seconds. Missing or unreadable frames are skipped without an error, but at least one readable frame is required, otherwise the promise rejects with `ENCODE_ERROR`. A skipped frame is not replaced: the other frames keep their `i / fps` timestamps, and missing frames at the end make the video shorter. Run `findMissingFrames` first if a partial capture should fail the export (see [Checking frames before encoding](#checking-frames-before-encoding)).
 - Each frame is scaled to `width` x `height`. Aspect ratio is not preserved, so capture frames at the output size or the same aspect ratio.
 - An existing file at `outputPath` is replaced.
 - Whole-number `fps` gives identical timing on both platforms. Fractional values such as `29.97` pass validation, but iOS truncates the time scale to a whole number (`29.97` is timed as 29 fps) while Android uses microsecond timestamps.
@@ -370,6 +374,29 @@ On iOS, a track whose file has no readable audio is skipped rather than failing 
 | `frameFileName(index)` | `string` | The file name the encoder reads for a frame, e.g. `frameFileName(7)` is `frame_000007.jpg`. Throws `INVALID_ARGUMENT` for anything but an integer from 0 to 999999. |
 | `frameFilePath(framesDir, index)` | `string` | `framesDir` (plain path or `file://` URI) joined with `frameFileName(index)`, as a native path. Trailing slashes on `framesDir` are ignored. |
 | `toNativePath(uri)` | `string` | Trims whitespace, strips `file://` (and `file://localhost`), decodes percent-encoding, and returns a plain absolute path. Plain paths pass through trimmed. Throws `INVALID_ARGUMENT` for an empty string or broken percent-encoding. |
+| `findMissingFrames(framesDir, frameCount, frameExists)` | `Promise<number[]>` | Calls `frameExists(path, index)` for every frame from `0` to `frameCount - 1` (32 checks at a time) and resolves the indexes that returned `false`, in ascending order. `path` is the native path the encoder will read. Rejects with `INVALID_ARGUMENT` if `frameCount` is not an integer from 1 to 1000000, if `frameExists` is not a function, or if it returns anything other than a boolean (for example a whole file info object). Errors thrown by `frameExists` are passed through. |
+
+#### Checking frames before encoding
+
+The native encoders skip a frame file that is missing or cannot be decoded and keep going, so a capture loop that failed halfway still produces a video. `findMissingFrames` lets you catch that in JavaScript first. The package has no file system dependency, so you pass the existence check. It only checks that each file exists, not that it is a valid JPEG.
+
+```typescript
+import * as FileSystem from 'expo-file-system';
+import { encodeVideo, findMissingFrames, frameFileName, toNativePath } from 'expo-video-encoder';
+
+const framesDir = `${FileSystem.cacheDirectory}frames/`;
+
+const missing = await findMissingFrames(framesDir, frameCount, async (_path, index) => {
+  const info = await FileSystem.getInfoAsync(`${framesDir}${frameFileName(index)}`);
+  return info.exists;
+});
+
+if (missing.length > 0) {
+  throw new Error(`Frames not written: ${missing.slice(0, 10).join(', ')}`);
+}
+
+await encodeVideo({ framesDir: toNativePath(framesDir), frameCount, fps, width, height, outputPath });
+```
 
 ### Errors
 
@@ -378,7 +405,7 @@ Problems this package can detect in JavaScript are thrown (or, from the async fu
 | `code` | When | `field` |
 |--------|------|---------|
 | `INVALID_OPTIONS` | An `encodeVideo` or `mixAudio` option breaks a rule listed above. | The option path, such as `'fps'`, `'outputPath'`, or `'audioTracks[1].volume'`. `undefined` when the options value itself is not an object. |
-| `INVALID_ARGUMENT` | A path or frame helper received a value it cannot use. | `undefined` |
+| `INVALID_ARGUMENT` | A path or frame helper (including `findMissingFrames`) received a value it cannot use. | `undefined` |
 | `UNSUPPORTED_PLATFORM` | `encodeVideo` off iOS and Android, or `mixAudio` off iOS. | `undefined` |
 
 Failures inside the native encoder are rejected by Expo Modules as errors with a string `code`, not as `ExpoVideoEncoderError`:
@@ -558,6 +585,9 @@ A bare `uri.replace(/^file:\/\//, '')` strips the prefix but leaves `%20` in pla
 
 **"No video track in source file"**
 → `encodeVideo` failed silently and you called `mixAudio` on a corrupt/empty file. Check that `encodeVideo` resolved `true` before calling `mixAudio`.
+
+**Video is shorter than expected, or freezes on one frame**
+→ Some frame files were missing or unreadable and the encoder skipped them. Run `findMissingFrames` before `encodeVideo` to list the missing indexes.
 
 **Frames appear in wrong order**
 → Frame files must be named with zero-padded numbers: `frame_000000.jpg`, not `frame_0.jpg`. Use `frameFileName(i)`.

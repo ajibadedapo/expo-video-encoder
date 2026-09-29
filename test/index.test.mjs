@@ -145,3 +145,9 @@ test('the native module is resolved once by its registered name and reused', asy
   await encoder.mixAudio(validMixOptions());
   assert.deepEqual(requireNativeModuleCalls, ['VideoEncoder']);
 });
+
+test('the package entry re-exports findMissingFrames', async () => {
+  const missing = await encoder.findMissingFrames('file:///tmp/f', 2, (path) => path.endsWith('frame_000000.jpg'));
+  assert.deepEqual(missing, [1]);
+  assert.deepEqual(nativeCalls, []);
+});
