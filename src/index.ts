@@ -1,12 +1,12 @@
 import { Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
-import { ExpoVideoEncoderError } from './errors';
+import { ExpoVideoEncoderError, fromNativeError } from './errors';
 import { assertEncodeVideoOptions, assertMixAudioOptions } from './validation';
 
 export { findMissingFrames, frameFileName, frameFilePath, toNativePath } from './paths';
 export type { FrameExistsCheck } from './paths';
 export { ExpoVideoEncoderError, isExpoVideoEncoderError } from './errors';
-export type { ExpoVideoEncoderErrorCode } from './errors';
+export type { ExpoVideoEncoderErrorCode, ExpoVideoEncoderNativeErrorCode } from './errors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,11 @@ function getNative() {
 export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean> {
   if (!isSupportedPlatform()) unsupported('encodeVideo');
   assertEncodeVideoOptions(options);
-  return getNative()!.encodeVideo(options);
+  try {
+    return await getNative()!.encodeVideo(options);
+  } catch (error) {
+    throw fromNativeError(error);
+  }
 }
 
 export function isAudioMixSupported(): boolean {
@@ -114,5 +118,9 @@ export async function mixAudio(options: MixAudioOptions): Promise<boolean> {
     throw new ExpoVideoEncoderError('UNSUPPORTED_PLATFORM', 'expo-video-encoder: mixAudio is only supported on iOS.');
   }
   assertMixAudioOptions(options);
-  return getNative()!.mixAudio(options);
+  try {
+    return await getNative()!.mixAudio(options);
+  } catch (error) {
+    throw fromNativeError(error);
+  }
 }

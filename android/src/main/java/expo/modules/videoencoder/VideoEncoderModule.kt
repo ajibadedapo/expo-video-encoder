@@ -12,6 +12,8 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 
+class NoReadableFramesException(message: String) : Exception(message)
+
 class VideoEncoderModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("VideoEncoder")
@@ -32,6 +34,8 @@ class VideoEncoderModule : Module() {
       try {
         encodeFrames(framesDir, frameCount, fps, width, height, outputPath)
         promise.resolve(true)
+      } catch (error: NoReadableFramesException) {
+        promise.reject("NO_READABLE_FRAMES", error.message ?: "No readable frame files were found", error)
       } catch (error: Exception) {
         promise.reject("ENCODE_ERROR", error.message ?: "Encode failed", error)
       }
@@ -136,7 +140,7 @@ class VideoEncoderModule : Module() {
         drain(false)
       }
 
-      if (appended == 0) throw IllegalStateException("No readable frame files were found")
+      if (appended == 0) throw NoReadableFramesException("None of the $frameCount frame files in $framesDir could be read as JPEG")
 
       var eosIndex = codec.dequeueInputBuffer(10_000)
       while (eosIndex < 0) eosIndex = codec.dequeueInputBuffer(10_000)

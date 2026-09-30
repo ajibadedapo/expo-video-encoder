@@ -267,7 +267,7 @@ Everything below is exported from `expo-video-encoder`:
 | `frameFileName`, `frameFilePath`, `toNativePath` | functions | any (pure JavaScript) |
 | `findMissingFrames` | async function | any (you supply the file check) |
 | `ExpoVideoEncoderError`, `isExpoVideoEncoderError` | error class and type guard | any |
-| `EncodeVideoOptions`, `MixAudioOptions`, `AudioTrack`, `FrameExistsCheck`, `ExpoVideoEncoderErrorCode` | types | |
+| `EncodeVideoOptions`, `MixAudioOptions`, `AudioTrack`, `FrameExistsCheck`, `ExpoVideoEncoderErrorCode`, `ExpoVideoEncoderNativeErrorCode` | types | |
 
 ### Types
 
@@ -297,11 +297,24 @@ type MixAudioOptions = {
 
 type FrameExistsCheck = (path: string, index: number) => boolean | Promise<boolean>;
 
-type ExpoVideoEncoderErrorCode = 'INVALID_OPTIONS' | 'INVALID_ARGUMENT' | 'UNSUPPORTED_PLATFORM';
+type ExpoVideoEncoderNativeErrorCode =
+  | 'NO_READABLE_FRAMES'
+  | 'WRITER_FAILED'
+  | 'ENCODE_ERROR'
+  | 'MIX_ERROR'
+  | 'MIX_UNSUPPORTED'
+  | 'INVALID_ARGS';
+
+type ExpoVideoEncoderErrorCode =
+  | 'INVALID_OPTIONS'
+  | 'INVALID_ARGUMENT'
+  | 'UNSUPPORTED_PLATFORM'
+  | ExpoVideoEncoderNativeErrorCode;
 
 class ExpoVideoEncoderError extends Error {
   readonly code: ExpoVideoEncoderErrorCode;
   readonly field: string | undefined;
+  readonly cause: unknown;
 }
 
 function encodeVideo(options: EncodeVideoOptions): Promise<boolean>;
@@ -334,10 +347,10 @@ Assembles a directory of JPEG frames into an H.264 MP4 file. Resolves `true` on 
 Behaviour:
 
 - Frames are read as `framesDir/frame_000000.jpg` up to `frame_{frameCount - 1}` (six digit zero padding). Use `frameFileName(i)` or `frameFilePath(dir, i)` to produce those names.
-- Frame `i` is shown at `i / fps` seconds. Missing or unreadable frames are skipped without an error, but at least one readable frame is required, otherwise the promise rejects with `ENCODE_ERROR`. A skipped frame is not replaced: the other frames keep their `i / fps` timestamps, and missing frames at the end make the video shorter. Run `findMissingFrames` first if a partial capture should fail the export (see [Checking frames before encoding](#checking-frames-before-encoding)).
+- Frame `i` is shown at `i / fps` seconds. Missing or unreadable frames are skipped without an error, but at least one readable frame is required, otherwise the promise rejects with `NO_READABLE_FRAMES`. A skipped frame is not replaced: the other frames keep their `i / fps` timestamps, and missing frames at the end make the video shorter. Run `findMissingFrames` first if a partial capture should fail the export (see [Checking frames before encoding](#checking-frames-before-encoding)).
 - Each frame is scaled to `width` x `height`. Aspect ratio is not preserved, so capture frames at the output size or the same aspect ratio.
-- An existing file at `outputPath` is replaced.
-- Whole-number `fps` gives identical timing on both platforms. Fractional values such as `29.97` pass validation, but iOS truncates the time scale to a whole number (`29.97` is timed as 29 fps) while Android uses microsecond timestamps.
+- An existing file at `outputPath` is replaced, and missing parent folders of `outputPath` are created.
+- Fractional `fps` such as `29.97` is kept on both platforms. iOS places frames on a 90 kHz clock and Android uses microsecond timestamps, so 60 frames at `29.97` last 2.002 seconds on either.
 
 ### `mixAudio(options: MixAudioOptions): Promise<boolean>`
 
@@ -408,14 +421,18 @@ Problems this package can detect in JavaScript are thrown (or, from the async fu
 | `INVALID_ARGUMENT` | A path or frame helper (including `findMissingFrames`) received a value it cannot use. | `undefined` |
 | `UNSUPPORTED_PLATFORM` | `encodeVideo` off iOS and Android, or `mixAudio` off iOS. | `undefined` |
 
-Failures inside the native encoder are rejected by Expo Modules as errors with a string `code`, not as `ExpoVideoEncoderError`:
+Failures inside the native modules are also rejected as `ExpoVideoEncoderError`, with the native code kept as `code` and the original Expo Modules error as `cause`:
 
-| Native `code` | When |
-|---------------|------|
-| `INVALID_ARGS` | The native side could not read the options (normally caught earlier by `INVALID_OPTIONS`). |
-| `ENCODE_ERROR` | Frame encoding failed, for example no readable frames or a writer failure. |
+| `code` | When |
+|--------|------|
+| `NO_READABLE_FRAMES` | `encodeVideo` found none of the `frameCount` frame files, or none decoded as JPEG. No output file is left behind. |
+| `WRITER_FAILED` | iOS only. `AVAssetWriter` could not be created, refused the H.264 settings, failed to start, stopped during encoding (for example when the disk is full), or could not finish the file. The message includes the reason `AVAssetWriter` gave. |
+| `ENCODE_ERROR` | Any other encoding failure, for example an Android `MediaCodec` error or an existing `outputPath` that could not be replaced. |
 | `MIX_ERROR` | iOS audio mixing failed, for example the video has no video track or the export failed. |
 | `MIX_UNSUPPORTED` | The Android native module was called for `mixAudio` directly. The JavaScript API rejects with `UNSUPPORTED_PLATFORM` first. |
+| `INVALID_ARGS` | The native side could not read the options (normally caught earlier by `INVALID_OPTIONS`). |
+
+Errors from the native layer that do not carry one of these codes are passed through unchanged.
 
 ```typescript
 import { encodeVideo, isExpoVideoEncoderError } from 'expo-video-encoder';
@@ -425,6 +442,8 @@ try {
 } catch (error) {
   if (isExpoVideoEncoderError(error, 'INVALID_OPTIONS')) {
     console.warn(`Fix ${error.field}: ${error.message}`);
+  } else if (isExpoVideoEncoderError(error, 'NO_READABLE_FRAMES')) {
+    console.warn('No frames were captured, nothing to encode.');
   } else {
     throw error;
   }

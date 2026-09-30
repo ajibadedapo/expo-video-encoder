@@ -8,14 +8,17 @@ const platform = { OS: 'ios' };
 const nativeCalls = [];
 const requireNativeModuleCalls = [];
 let nativeResult = true;
+let nativeError = null;
 
 const fakeNativeModule = {
   encodeVideo: async (options) => {
     nativeCalls.push(['encodeVideo', options]);
+    if (nativeError) throw nativeError;
     return nativeResult;
   },
   mixAudio: async (options) => {
     nativeCalls.push(['mixAudio', options]);
+    if (nativeError) throw nativeError;
     return nativeResult;
   },
 };
@@ -58,6 +61,7 @@ beforeEach(() => {
   platform.OS = 'ios';
   nativeCalls.length = 0;
   nativeResult = true;
+  nativeError = null;
 });
 
 test('the package entry re-exports the path helpers', () => {
@@ -150,4 +154,39 @@ test('the package entry re-exports findMissingFrames', async () => {
   const missing = await encoder.findMissingFrames('file:///tmp/f', 2, (path) => path.endsWith('frame_000000.jpg'));
   assert.deepEqual(missing, [1]);
   assert.deepEqual(nativeCalls, []);
+});
+
+const codedError = (code, message) => Object.assign(new Error(message), { code });
+
+test('native encode rejections become ExpoVideoEncoderError with the native code and cause', async () => {
+  for (const code of ['NO_READABLE_FRAMES', 'WRITER_FAILED', 'ENCODE_ERROR', 'INVALID_ARGS']) {
+    nativeError = codedError(code, `native ${code}`);
+    await assert.rejects(encoder.encodeVideo(validEncodeOptions()), (error) => {
+      assert.ok(encoder.isExpoVideoEncoderError(error, code), code);
+      assert.equal(error.message, `expo-video-encoder: native ${code}`);
+      assert.equal(error.field, undefined);
+      assert.equal(error.cause, nativeError);
+      return true;
+    });
+  }
+});
+
+test('native mix rejections become ExpoVideoEncoderError', async () => {
+  nativeError = codedError('MIX_ERROR', 'Export failed');
+  await assert.rejects(encoder.mixAudio(validMixOptions()), (error) => encoder.isExpoVideoEncoderError(error, 'MIX_ERROR'));
+});
+
+test('native errors without a known code pass through unchanged', async () => {
+  for (const value of [codedError('ERR_SOMETHING_ELSE', 'x'), new Error('plain'), 'a string']) {
+    nativeError = value;
+    await assert.rejects(encoder.encodeVideo(validEncodeOptions()), (error) => {
+      assert.equal(error, value);
+      return true;
+    });
+  }
+});
+
+test('a native error with an empty message falls back to its code', async () => {
+  nativeError = codedError('WRITER_FAILED', '');
+  await assert.rejects(encoder.encodeVideo(validEncodeOptions()), /expo-video-encoder: WRITER_FAILED/);
 });

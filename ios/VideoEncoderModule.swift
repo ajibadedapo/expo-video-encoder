@@ -31,6 +31,8 @@ public class VideoEncoderModule: Module {
             outputPath: outputPath
           )
           promise.resolve(true)
+        } catch let failure as EncodeFailure {
+          promise.reject(failure.code, failure.message)
         } catch {
           promise.reject("ENCODE_ERROR", error.localizedDescription)
         }
@@ -65,6 +67,22 @@ public class VideoEncoderModule: Module {
 
   // MARK: - Frame encoding
 
+  struct EncodeFailure: Error {
+    let code: String
+    let message: String
+
+    static func writer(_ step: String, _ writer: AVAssetWriter?) -> EncodeFailure {
+      let reason = writer?.error?.localizedDescription ?? "no reason given by AVAssetWriter"
+      return EncodeFailure(code: "WRITER_FAILED", message: "\(step): \(reason)")
+    }
+  }
+
+  static let presentationTimescale: CMTimeScale = 90_000
+
+  static func presentationTime(frameIndex: Int, fps: Double) -> CMTime {
+    CMTime(seconds: Double(frameIndex) / fps, preferredTimescale: presentationTimescale)
+  }
+
   private static func encodeFrames(
     framesDir:  String,
     frameCount: Int,
@@ -78,14 +96,19 @@ public class VideoEncoderModule: Module {
     if FileManager.default.fileExists(atPath: outputPath) {
       try FileManager.default.removeItem(at: outputURL)
     }
+    try FileManager.default.createDirectory(
+      at: outputURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
 
-    guard let writer = try? AVAssetWriter(outputURL: outputURL, fileType: .mp4) else {
-      throw NSError(domain: "VideoEncoder", code: 1, userInfo: [
-        NSLocalizedDescriptionKey: "Failed to create AVAssetWriter"
-      ])
+    let writer: AVAssetWriter
+    do {
+      writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+    } catch {
+      throw EncodeFailure(code: "WRITER_FAILED", message: "Could not create AVAssetWriter: \(error.localizedDescription)")
     }
 
-    let bitrate = width * height * Int(fps) / 8
+    let bitrate = Int(Double(width * height) * fps / 8)
     let videoSettings: [String: Any] = [
       AVVideoCodecKey:  AVVideoCodecType.h264,
       AVVideoWidthKey:  width,
@@ -108,11 +131,15 @@ public class VideoEncoderModule: Module {
       ]
     )
 
+    guard writer.canAdd(input) else {
+      throw EncodeFailure(code: "WRITER_FAILED", message: "AVAssetWriter rejected H.264 output at \(width)x\(height)")
+    }
     writer.add(input)
-    writer.startWriting()
-    writer.startSession(atSourceTime: .zero)
 
-    let frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
+    guard writer.startWriting() else {
+      throw EncodeFailure.writer("Could not start writing", writer)
+    }
+    writer.startSession(atSourceTime: .zero)
 
     var appendedFrames = 0
 
@@ -125,37 +152,42 @@ public class VideoEncoderModule: Module {
         let buffer = pixelBuffer(from: image, width: width, height: height)
       else { continue }
 
-      while !input.isReadyForMoreMediaData { Thread.sleep(forTimeInterval: 0.005) }
+      while !input.isReadyForMoreMediaData {
+        if writer.status != .writing {
+          let failure = EncodeFailure.writer("Writer stopped before frame \(i)", writer)
+          writer.cancelWriting()
+          throw failure
+        }
+        Thread.sleep(forTimeInterval: 0.005)
+      }
 
-      let pts = CMTimeMultiply(frameDuration, multiplier: Int32(i))
-      if adaptor.append(buffer, withPresentationTime: pts) {
+      if adaptor.append(buffer, withPresentationTime: presentationTime(frameIndex: i, fps: fps)) {
         appendedFrames += 1
       } else {
+        let failure = EncodeFailure.writer("Could not append frame \(i)", writer)
         writer.cancelWriting()
-        throw NSError(domain: "VideoEncoder", code: 2, userInfo: [
-          NSLocalizedDescriptionKey: "Failed to append frame \(i)"
-        ])
+        throw failure
       }
     }
 
     guard appendedFrames > 0 else {
       writer.cancelWriting()
-      throw NSError(domain: "VideoEncoder", code: 3, userInfo: [
-        NSLocalizedDescriptionKey: "No readable frame files were found"
-      ])
+      try? FileManager.default.removeItem(at: outputURL)
+      throw EncodeFailure(
+        code: "NO_READABLE_FRAMES",
+        message: "None of the \(frameCount) frame files in \(framesDir) could be read as JPEG"
+      )
     }
 
     input.markAsFinished()
 
     let sema = DispatchSemaphore(value: 0)
-    var writeError: Error?
-    writer.finishWriting {
-      writeError = writer.error
-      sema.signal()
-    }
+    writer.finishWriting { sema.signal() }
     sema.wait()
 
-    if let err = writeError { throw err }
+    guard writer.status == .completed else {
+      throw EncodeFailure.writer("Could not finish the MP4", writer)
+    }
   }
 
   // MARK: - Audio mixing
