@@ -28,6 +28,17 @@ export type EncodeVideoOptions = {
   outputPath: string;
 };
 
+export type EncodeProgress = {
+  processedFrames: number;
+  encodedFrames: number;
+  frameCount: number;
+  progress: number;
+};
+
+export type EncodeVideoProgressOptions = {
+  onProgress?: (progress: EncodeProgress) => void;
+};
+
 /**
  * A single audio track to mix into the exported video.
  */
@@ -68,11 +79,48 @@ function isSupportedPlatform(): boolean {
 
 // ─── Module ───────────────────────────────────────────────────────────────────
 
-let _native: { encodeVideo: (o: EncodeVideoOptions) => Promise<boolean>; mixAudio: (o: MixAudioOptions) => Promise<boolean> } | null = null;
+type NativeEncodeProgressEvent = {
+  progressId?: unknown;
+  processedFrames?: unknown;
+  encodedFrames?: unknown;
+  frameCount?: unknown;
+};
 
-function getNative() {
-  if (!_native) _native = requireNativeModule('VideoEncoder');
+type NativeSubscription = { remove: () => void };
+
+type NativeVideoEncoder = {
+  encodeVideo: (o: EncodeVideoOptions & { progressId?: string }) => Promise<boolean>;
+  mixAudio: (o: MixAudioOptions) => Promise<boolean>;
+  addListener?: (eventName: string, listener: (event: NativeEncodeProgressEvent) => void) => NativeSubscription;
+};
+
+let _native: NativeVideoEncoder | null = null;
+let nextProgressId = 0;
+const encodeProgressEvent = 'onEncodeProgress';
+
+function getNative(): NativeVideoEncoder {
+  if (!_native) _native = requireNativeModule('VideoEncoder') as NativeVideoEncoder;
   return _native;
+}
+
+function assertProgressOptions(progressOptions: unknown): asserts progressOptions is EncodeVideoProgressOptions | undefined {
+  if (progressOptions === undefined) return;
+  if (!progressOptions || typeof progressOptions !== 'object') {
+    throw new ExpoVideoEncoderError('INVALID_ARGUMENT', 'expo-video-encoder: encodeVideo progress options must be an object.');
+  }
+  const { onProgress } = progressOptions as { onProgress?: unknown };
+  if (onProgress !== undefined && typeof onProgress !== 'function') {
+    throw new ExpoVideoEncoderError('INVALID_ARGUMENT', 'expo-video-encoder: encodeVideo onProgress must be a function.');
+  }
+}
+
+function toEncodeProgress(event: NativeEncodeProgressEvent, progressId: string): EncodeProgress | null {
+  if (!event || event.progressId !== progressId) return null;
+  const { processedFrames, encodedFrames, frameCount } = event;
+  if (typeof processedFrames !== 'number' || typeof encodedFrames !== 'number' || typeof frameCount !== 'number' || frameCount <= 0) {
+    return null;
+  }
+  return { processedFrames, encodedFrames, frameCount, progress: Math.min(1, Math.max(0, processedFrames / frameCount)) };
 }
 
 /**
@@ -87,13 +135,28 @@ function getNative() {
  * @platform ios
  * @platform android
  */
-export async function encodeVideo(options: EncodeVideoOptions): Promise<boolean> {
+export async function encodeVideo(options: EncodeVideoOptions, progressOptions?: EncodeVideoProgressOptions): Promise<boolean> {
   if (!isSupportedPlatform()) unsupported('encodeVideo');
   assertEncodeVideoOptions(options);
+  assertProgressOptions(progressOptions);
+  const native = getNative();
+  const onProgress = progressOptions?.onProgress;
+  let subscription: NativeSubscription | null = null;
+  let nativeOptions: EncodeVideoOptions & { progressId?: string } = options;
+  if (onProgress && typeof native.addListener === 'function') {
+    const progressId = `encode-${++nextProgressId}`;
+    nativeOptions = { ...options, progressId };
+    subscription = native.addListener(encodeProgressEvent, (event) => {
+      const progress = toEncodeProgress(event, progressId);
+      if (progress) onProgress(progress);
+    });
+  }
   try {
-    return await getNative()!.encodeVideo(options);
+    return await native.encodeVideo(nativeOptions);
   } catch (error) {
     throw fromNativeError(error);
+  } finally {
+    subscription?.remove();
   }
 }
 
@@ -119,7 +182,7 @@ export async function mixAudio(options: MixAudioOptions): Promise<boolean> {
   }
   assertMixAudioOptions(options);
   try {
-    return await getNative()!.mixAudio(options);
+    return await getNative().mixAudio(options);
   } catch (error) {
     throw fromNativeError(error);
   }

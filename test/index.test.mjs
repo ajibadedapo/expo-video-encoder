@@ -9,10 +9,26 @@ const nativeCalls = [];
 const requireNativeModuleCalls = [];
 let nativeResult = true;
 let nativeError = null;
+let nativeEventsDuringEncode = [];
+const listeners = new Set();
+
+const emitNative = (eventName, event) => {
+  for (const listener of listeners) {
+    if (listener.eventName === eventName) listener.callback(event);
+  }
+};
 
 const fakeNativeModule = {
+  addListener: (eventName, callback) => {
+    const listener = { eventName, callback };
+    listeners.add(listener);
+    return { remove: () => listeners.delete(listener) };
+  },
   encodeVideo: async (options) => {
     nativeCalls.push(['encodeVideo', options]);
+    for (const event of nativeEventsDuringEncode) {
+      emitNative('onEncodeProgress', typeof event === 'function' ? event(options) : event);
+    }
     if (nativeError) throw nativeError;
     return nativeResult;
   },
@@ -62,6 +78,8 @@ beforeEach(() => {
   nativeCalls.length = 0;
   nativeResult = true;
   nativeError = null;
+  nativeEventsDuringEncode = [];
+  listeners.clear();
 });
 
 test('the package entry re-exports the path helpers', () => {
@@ -189,4 +207,88 @@ test('native errors without a known code pass through unchanged', async () => {
 test('a native error with an empty message falls back to its code', async () => {
   nativeError = codedError('WRITER_FAILED', '');
   await assert.rejects(encoder.encodeVideo(validEncodeOptions()), /expo-video-encoder: WRITER_FAILED/);
+});
+
+const progressEvent = (processedFrames, encodedFrames, frameCount = 30) => (options) => ({
+  progressId: options.progressId,
+  processedFrames,
+  encodedFrames,
+  frameCount,
+});
+
+test('encodeVideo without onProgress sends the options unchanged and adds no listener', async () => {
+  const options = validEncodeOptions();
+  await encoder.encodeVideo(options, {});
+  await encoder.encodeVideo(options);
+  assert.deepEqual(nativeCalls, [['encodeVideo', options], ['encodeVideo', options]]);
+  assert.equal(listeners.size, 0);
+});
+
+test('encodeVideo forwards native progress events for its own job to onProgress', async () => {
+  nativeEventsDuringEncode = [progressEvent(3, 3), progressEvent(15, 14), progressEvent(30, 29)];
+  const received = [];
+  assert.equal(await encoder.encodeVideo(validEncodeOptions(), { onProgress: (progress) => received.push(progress) }), true);
+  assert.deepEqual(received, [
+    { processedFrames: 3, encodedFrames: 3, frameCount: 30, progress: 0.1 },
+    { processedFrames: 15, encodedFrames: 14, frameCount: 30, progress: 0.5 },
+    { processedFrames: 30, encodedFrames: 29, frameCount: 30, progress: 1 },
+  ]);
+  const [[, sentOptions]] = nativeCalls;
+  assert.match(sentOptions.progressId, /^encode-\d+$/);
+  assert.deepEqual({ ...sentOptions, progressId: undefined }, { ...validEncodeOptions(), progressId: undefined });
+  assert.equal(listeners.size, 0);
+});
+
+test('concurrent encodes only see their own progress events', async () => {
+  const first = [];
+  const second = [];
+  nativeEventsDuringEncode = [progressEvent(10, 10), { progressId: 'encode-someone-else', processedFrames: 1, encodedFrames: 1, frameCount: 30 }];
+  await Promise.all([
+    encoder.encodeVideo(validEncodeOptions(), { onProgress: (progress) => first.push(progress.processedFrames) }),
+    encoder.encodeVideo({ ...validEncodeOptions(), outputPath: '/tmp/other.mp4' }, { onProgress: (progress) => second.push(progress.processedFrames) }),
+  ]);
+  assert.notEqual(nativeCalls[0][1].progressId, nativeCalls[1][1].progressId);
+  assert.deepEqual(first, [10]);
+  assert.deepEqual(second, [10]);
+});
+
+test('malformed native progress events are ignored', async () => {
+  nativeEventsDuringEncode = [
+    null,
+    (options) => ({ progressId: options.progressId }),
+    (options) => ({ progressId: options.progressId, processedFrames: '3', encodedFrames: 3, frameCount: 30 }),
+    progressEvent(1, 1, 0),
+    progressEvent(6, 6),
+  ];
+  const received = [];
+  await encoder.encodeVideo(validEncodeOptions(), { onProgress: (progress) => received.push(progress.processedFrames) });
+  assert.deepEqual(received, [6]);
+});
+
+test('the progress listener is removed when the native encode rejects', async () => {
+  nativeEventsDuringEncode = [progressEvent(2, 0)];
+  nativeError = Object.assign(new Error('no frames'), { code: 'NO_READABLE_FRAMES' });
+  const received = [];
+  await assert.rejects(
+    encoder.encodeVideo(validEncodeOptions(), { onProgress: (progress) => received.push(progress) }),
+    (error) => encoder.isExpoVideoEncoderError(error, 'NO_READABLE_FRAMES'),
+  );
+  assert.equal(received.length, 1);
+  assert.equal(listeners.size, 0);
+});
+
+test('invalid progress options reject as INVALID_ARGUMENT before native work', async () => {
+  for (const progressOptions of [null, 'fast', { onProgress: 'yes' }, { onProgress: {} }]) {
+    await assert.rejects(encoder.encodeVideo(validEncodeOptions(), progressOptions), (error) => {
+      assert.ok(encoder.isExpoVideoEncoderError(error, 'INVALID_ARGUMENT'), String(progressOptions));
+      return true;
+    });
+  }
+  assert.deepEqual(nativeCalls, []);
+  assert.equal(listeners.size, 0);
+});
+
+test('invalid encode options reject before a progress listener is added', async () => {
+  await assert.rejects(encoder.encodeVideo({ ...validEncodeOptions(), fps: 0 }, { onProgress: () => {} }), /fps/);
+  assert.equal(listeners.size, 0);
 });

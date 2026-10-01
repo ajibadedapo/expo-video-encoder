@@ -38,6 +38,7 @@ Apple ships a fully capable video encoder in every iPhone and iPad called **AVFo
 - **H.264 MP4 encoding:** industry-standard format, plays everywhere
 - **Cross-platform:** frame encoding runs on iOS (AVFoundation) and Android (MediaCodec) behind one API
 - **Frame-by-frame assembly:** snapshot your canvas, Skia surface, or any pixel source
+- **Encode progress:** an optional `onProgress` callback reports how many frames have been processed, on iOS and Android
 - **Audio mixing:** place up to 16 non-overlapping audio clips on the timeline, each with its own start time and volume (iOS today, see [Platform support](#platform-support))
 - **Hardware accelerated:** uses the device's built-in video encoder chip on both platforms
 - **Zero external dependencies:** no CocoaPods binary downloads, no xcframework, no surprises
@@ -267,7 +268,7 @@ Everything below is exported from `expo-video-encoder`:
 | `frameFileName`, `frameFilePath`, `toNativePath` | functions | any (pure JavaScript) |
 | `findMissingFrames` | async function | any (you supply the file check) |
 | `ExpoVideoEncoderError`, `isExpoVideoEncoderError` | error class and type guard | any |
-| `EncodeVideoOptions`, `MixAudioOptions`, `AudioTrack`, `FrameExistsCheck`, `ExpoVideoEncoderErrorCode`, `ExpoVideoEncoderNativeErrorCode` | types | |
+| `EncodeVideoOptions`, `EncodeVideoProgressOptions`, `EncodeProgress`, `MixAudioOptions`, `AudioTrack`, `FrameExistsCheck`, `ExpoVideoEncoderErrorCode`, `ExpoVideoEncoderNativeErrorCode` | types | |
 
 ### Types
 
@@ -279,6 +280,17 @@ type EncodeVideoOptions = {
   width: number;
   height: number;
   outputPath: string;
+};
+
+type EncodeProgress = {
+  processedFrames: number;
+  encodedFrames: number;
+  frameCount: number;
+  progress: number;
+};
+
+type EncodeVideoProgressOptions = {
+  onProgress?: (progress: EncodeProgress) => void;
 };
 
 type AudioTrack = {
@@ -317,7 +329,7 @@ class ExpoVideoEncoderError extends Error {
   readonly cause: unknown;
 }
 
-function encodeVideo(options: EncodeVideoOptions): Promise<boolean>;
+function encodeVideo(options: EncodeVideoOptions, progressOptions?: EncodeVideoProgressOptions): Promise<boolean>;
 function mixAudio(options: MixAudioOptions): Promise<boolean>;
 function isAudioMixSupported(): boolean;
 function frameFileName(index: number): string;
@@ -331,7 +343,7 @@ function isExpoVideoEncoderError(error: unknown, code?: ExpoVideoEncoderErrorCod
 
 Every path option (`framesDir`, `outputPath`, `videoPath`, and `AudioTrack.uri`) must be a plain absolute native path. It must start with `/`, must not start with `file://`, must not have leading or trailing whitespace, and must not contain `.` or `..` segments. Convert paths from `expo-file-system` with `toNativePath` first. Path comparisons (output inside `framesDir`, output equal to input, duplicate audio files) ignore letter case and trailing slashes, so the checks stay conservative on case-insensitive file systems.
 
-### `encodeVideo(options: EncodeVideoOptions): Promise<boolean>`
+### `encodeVideo(options: EncodeVideoOptions, progressOptions?: EncodeVideoProgressOptions): Promise<boolean>`
 
 Assembles a directory of JPEG frames into an H.264 MP4 file. Resolves `true` on success.
 
@@ -351,6 +363,35 @@ Behaviour:
 - Each frame is scaled to `width` x `height`. Aspect ratio is not preserved, so capture frames at the output size or the same aspect ratio.
 - An existing file at `outputPath` is replaced, and missing parent folders of `outputPath` are created. On Android, a failed encode deletes the partial file at `outputPath`.
 - Fractional `fps` such as `29.97` is kept on both platforms. iOS places frames on a 90 kHz clock and Android rounds `i / fps` to the nearest microsecond, so 60 frames at `29.97` last 2.002 seconds on either.
+
+#### Progress
+
+Pass `{ onProgress }` as the second argument to follow a long encode:
+
+```typescript
+await encodeVideo(options, {
+  onProgress: ({ processedFrames, frameCount, progress }) => {
+    setLabel(`Encoding ${processedFrames} of ${frameCount}`);
+    setBar(progress);
+  },
+});
+```
+
+| `EncodeProgress` field | Meaning |
+|------------------------|---------|
+| `processedFrames` | Frame files handled so far, from 1 to `frameCount`. Skipped (missing or unreadable) frames count as handled. |
+| `encodedFrames` | Frames actually handed to the encoder so far. Lower than `processedFrames` when frames were skipped. |
+| `frameCount` | The `frameCount` you passed. |
+| `progress` | `processedFrames / frameCount`, from 0 to 1. |
+
+- The native encoder sends at most one event per whole percent, plus one for the last frame, so a 100000 frame encode produces about 100 callbacks, and an encode of fewer than 100 frames produces one per frame.
+- `progress` reaching 1 means every frame has been read and queued. The MP4 is still being finished after that; the promise resolving is the completion signal.
+- Events arrive asynchronously from the native thread. The listener is removed as soon as the promise settles, so an event still in flight at that moment is dropped. Do not rely on seeing a final `progress: 1` before `await encodeVideo` returns.
+- Each call gets its own job id, so concurrent encodes only see their own progress.
+- Without `onProgress` nothing changes: no listener is added and the native side sends no events.
+- A second argument that is not an object, or an `onProgress` that is not a function, rejects with `INVALID_ARGUMENT` before any native work.
+- The callback runs on the JavaScript thread. An error it throws is not caught by `encodeVideo`.
+- Progress needs the native code from this version. With newer JavaScript on an older native build (for example an over the air update), `encodeVideo` still works and `onProgress` is simply never called.
 
 ### `mixAudio(options: MixAudioOptions): Promise<boolean>`
 
@@ -418,7 +459,7 @@ Problems this package can detect in JavaScript are thrown (or, from the async fu
 | `code` | When | `field` |
 |--------|------|---------|
 | `INVALID_OPTIONS` | An `encodeVideo` or `mixAudio` option breaks a rule listed above. | The option path, such as `'fps'`, `'outputPath'`, or `'audioTracks[1].volume'`. `undefined` when the options value itself is not an object. |
-| `INVALID_ARGUMENT` | A path or frame helper (including `findMissingFrames`) received a value it cannot use. | `undefined` |
+| `INVALID_ARGUMENT` | A path or frame helper (including `findMissingFrames`) received a value it cannot use, or the `encodeVideo` progress argument is not `{ onProgress?: function }`. | `undefined` |
 | `UNSUPPORTED_PLATFORM` | `encodeVideo` off iOS and Android, or `mixAudio` off iOS. | `undefined` |
 
 Failures inside the native modules are also rejected as `ExpoVideoEncoderError`, with the native code kept as `code` and the original Expo Modules error as `cause`:
@@ -456,7 +497,7 @@ Error messages are meant for developers and may be reworded in minor releases. M
 
 - Input is JPEG files on disk with the fixed `frame_000000.jpg` naming. There is no in-memory or PNG input.
 - Output is H.264 in MP4 only. The bitrate is derived from `width * height * fps / 8` and cannot be configured yet.
-- There is no progress reporting or cancellation. The promise settles when encoding finishes.
+- There is no cancellation. Progress is reported per frame read (see [Progress](#progress)), not for finishing the MP4 file or for `mixAudio`.
 - Audio mixing is iOS only, and overlapping clips (for example narration over music) are rejected. Mix overlapping audio into one file first.
 - Web and other platforms are not supported.
 - Android encoding has been verified on an emulator (see the 1.1.0 notes in [CHANGELOG.md](./CHANGELOG.md)), not yet on a physical Android device. CI covers the JavaScript layer and package contents, not native builds.
@@ -518,14 +559,17 @@ export async function runExport(options: ExportOptions): Promise<string | null> 
 
   // ── 3. Encode ───────────────────────────────────────────────────────────────
   onProgress('Encoding video', 0);
-  await encodeVideo({
-    framesDir:  toNativePath(framesDir),
-    frameCount,
-    fps,
-    width,
-    height,
-    outputPath: toNativePath(silentMp4),
-  });
+  await encodeVideo(
+    {
+      framesDir:  toNativePath(framesDir),
+      frameCount,
+      fps,
+      width,
+      height,
+      outputPath: toNativePath(silentMp4),
+    },
+    { onProgress: (encode) => onProgress('Encoding video', encode.progress) },
+  );
   onProgress('Encoding video', 1);
 
   // ── 4. Mix audio (non-fatal) ─────────────────────────────────────────────
@@ -643,7 +687,7 @@ A bare `uri.replace(/^file:\/\//, '')` strips the prefix but leaves `%20` in pla
 
 - [x] **Android frame encoding** via `MediaCodec` + `MediaMuxer` (`encodeVideo`)
 - [ ] **Android audio mixing** (`mixAudio`) via `MediaExtractor` + `MediaMuxer`
-- [ ] **Progress callbacks:** per-frame encode progress from native to JS
+- [x] **Progress callbacks:** per-frame encode progress from native to JS (`encodeVideo(options, { onProgress })`)
 - [ ] **Quality presets:** CRF control for file size vs. quality tradeoff
 - [ ] **HEVC / H.265:** smaller files at the same quality on iOS 11+
 - [ ] **Frame timestamp control:** variable frame rate support

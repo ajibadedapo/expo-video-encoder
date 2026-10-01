@@ -19,6 +19,11 @@ class MuxerFailureException(message: String, cause: Throwable?) : Exception(mess
 internal fun presentationTimeUs(frameIndex: Int, fps: Double): Long =
   Math.round(frameIndex * 1_000_000.0 / fps)
 
+internal const val ENCODE_PROGRESS_EVENT = "onEncodeProgress"
+
+internal fun progressPercent(processedFrames: Int, frameCount: Int): Int =
+  processedFrames * 100 / frameCount.coerceAtLeast(1)
+
 internal fun bitRateFor(width: Int, height: Int, fps: Double): Int =
   (width.toDouble() * height * fps / 8).coerceIn(1.0, Int.MAX_VALUE.toDouble()).toInt()
 
@@ -33,6 +38,8 @@ class VideoEncoderModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("VideoEncoder")
 
+    Events(ENCODE_PROGRESS_EVENT)
+
     AsyncFunction("encodeVideo") { options: Map<String, Any?>, promise: Promise ->
       val framesDir = options["framesDir"] as? String
       val frameCount = (options["frameCount"] as? Number)?.toInt()
@@ -46,8 +53,10 @@ class VideoEncoderModule : Module() {
         return@AsyncFunction
       }
 
+      val onProgress = progressReporter(options["progressId"] as? String, frameCount)
+
       try {
-        encodeFrames(framesDir, frameCount, fps, width, height, outputPath)
+        encodeFrames(framesDir, frameCount, fps, width, height, outputPath, onProgress)
         promise.resolve(true)
       } catch (error: NoReadableFramesException) {
         promise.reject("NO_READABLE_FRAMES", error.message ?: "No readable frame files were found", error)
@@ -67,13 +76,29 @@ class VideoEncoderModule : Module() {
     }
   }
 
+  private fun progressReporter(progressId: String?, frameCount: Int): ((Int, Int) -> Unit)? {
+    if (progressId == null) return null
+    return { processedFrames, encodedFrames ->
+      sendEvent(
+        ENCODE_PROGRESS_EVENT,
+        mapOf(
+          "progressId" to progressId,
+          "processedFrames" to processedFrames,
+          "encodedFrames" to encodedFrames,
+          "frameCount" to frameCount
+        )
+      )
+    }
+  }
+
   private fun encodeFrames(
     framesDir: String,
     frameCount: Int,
     fps: Double,
     width: Int,
     height: Int,
-    outputPath: String
+    outputPath: String,
+    onProgress: ((Int, Int) -> Unit)?
   ) {
     val outFile = File(outputPath)
     if (outFile.exists() && !outFile.delete()) {
@@ -83,7 +108,7 @@ class VideoEncoderModule : Module() {
 
     var finished = false
     try {
-      writeFrames(framesDir, frameCount, fps, width, height, outputPath)
+      writeFrames(framesDir, frameCount, fps, width, height, outputPath, onProgress)
       finished = true
     } finally {
       if (!finished) outFile.delete()
@@ -96,7 +121,8 @@ class VideoEncoderModule : Module() {
     fps: Double,
     width: Int,
     height: Int,
-    outputPath: String
+    outputPath: String,
+    onProgress: ((Int, Int) -> Unit)?
   ) {
     val mime = MediaFormat.MIMETYPE_VIDEO_AVC
     val format = MediaFormat.createVideoFormat(mime, width, height).apply {
@@ -123,6 +149,15 @@ class VideoEncoderModule : Module() {
     val bufferInfo = MediaCodec.BufferInfo()
     var appended = 0
     var lastFrameIndex = -1
+    var lastReportedPercent = -1
+
+    fun reportProgress(processedFrames: Int) {
+      val report = onProgress ?: return
+      val percent = progressPercent(processedFrames, frameCount)
+      if (percent == lastReportedPercent && processedFrames != frameCount) return
+      lastReportedPercent = percent
+      report(processedFrames, appended)
+    }
 
     fun drain(endOfStream: Boolean) {
       while (true) {
@@ -176,8 +211,11 @@ class VideoEncoderModule : Module() {
 
       for (i in 0 until frameCount) {
         val framePath = File(framesDir, String.format("frame_%06d.jpg", i))
-        if (!framePath.exists()) continue
-        val decoded = BitmapFactory.decodeFile(framePath.absolutePath) ?: continue
+        val decoded = if (framePath.exists()) BitmapFactory.decodeFile(framePath.absolutePath) else null
+        if (decoded == null) {
+          reportProgress(i + 1)
+          continue
+        }
         val bitmap = if (decoded.width != width || decoded.height != height) {
           Bitmap.createScaledBitmap(decoded, width, height, true)
         } else {
@@ -197,6 +235,7 @@ class VideoEncoderModule : Module() {
         appended += 1
         lastFrameIndex = i
         drain(false)
+        reportProgress(i + 1)
       }
 
       if (appended == 0) throw NoReadableFramesException("None of the $frameCount frame files in $framesDir could be read as JPEG")

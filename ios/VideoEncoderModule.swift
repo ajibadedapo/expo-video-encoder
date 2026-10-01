@@ -7,6 +7,8 @@ public class VideoEncoderModule: Module {
   public func definition() -> ModuleDefinition {
     Name("VideoEncoder")
 
+    Events(VideoEncoderModule.encodeProgressEvent)
+
     AsyncFunction("encodeVideo") { (options: [String: Any], promise: Promise) in
       guard
         let framesDir  = options["framesDir"]  as? String,
@@ -20,6 +22,11 @@ public class VideoEncoderModule: Module {
         return
       }
 
+      let onProgress = self.progressReporter(
+        progressId: options["progressId"] as? String,
+        frameCount: frameCount
+      )
+
       DispatchQueue.global(qos: .userInitiated).async {
         do {
           try VideoEncoderModule.encodeFrames(
@@ -28,7 +35,8 @@ public class VideoEncoderModule: Module {
             fps:        fps,
             width:      width,
             height:     height,
-            outputPath: outputPath
+            outputPath: outputPath,
+            onProgress: onProgress
           )
           promise.resolve(true)
         } catch let failure as EncodeFailure {
@@ -67,6 +75,18 @@ public class VideoEncoderModule: Module {
 
   // MARK: - Frame encoding
 
+  private func progressReporter(progressId: String?, frameCount: Int) -> ((Int, Int) -> Void)? {
+    guard let progressId = progressId else { return nil }
+    return { [weak self] processedFrames, encodedFrames in
+      self?.sendEvent(VideoEncoderModule.encodeProgressEvent, [
+        "progressId":      progressId,
+        "processedFrames": processedFrames,
+        "encodedFrames":   encodedFrames,
+        "frameCount":      frameCount,
+      ])
+    }
+  }
+
   struct EncodeFailure: Error {
     let code: String
     let message: String
@@ -79,6 +99,12 @@ public class VideoEncoderModule: Module {
 
   static let presentationTimescale: CMTimeScale = 90_000
 
+  static let encodeProgressEvent = "onEncodeProgress"
+
+  static func progressPercent(processedFrames: Int, frameCount: Int) -> Int {
+    processedFrames * 100 / max(frameCount, 1)
+  }
+
   static func presentationTime(frameIndex: Int, fps: Double) -> CMTime {
     CMTime(seconds: Double(frameIndex) / fps, preferredTimescale: presentationTimescale)
   }
@@ -89,7 +115,8 @@ public class VideoEncoderModule: Module {
     fps:        Double,
     width:      Int,
     height:     Int,
-    outputPath: String
+    outputPath: String,
+    onProgress: ((Int, Int) -> Void)?
   ) throws {
     let outputURL = URL(fileURLWithPath: outputPath)
 
@@ -142,6 +169,15 @@ public class VideoEncoderModule: Module {
     writer.startSession(atSourceTime: .zero)
 
     var appendedFrames = 0
+    var lastReportedPercent = -1
+
+    func reportProgress(processedFrames: Int) {
+      guard let onProgress = onProgress else { return }
+      let percent = progressPercent(processedFrames: processedFrames, frameCount: frameCount)
+      guard percent != lastReportedPercent || processedFrames == frameCount else { return }
+      lastReportedPercent = percent
+      onProgress(processedFrames, appendedFrames)
+    }
 
     for i in 0..<frameCount {
       let frameName = String(format: "frame_%06d.jpg", i)
@@ -150,7 +186,10 @@ public class VideoEncoderModule: Module {
       guard
         let image  = UIImage(contentsOfFile: framePath),
         let buffer = pixelBuffer(from: image, width: width, height: height)
-      else { continue }
+      else {
+        reportProgress(processedFrames: i + 1)
+        continue
+      }
 
       while !input.isReadyForMoreMediaData {
         if writer.status != .writing {
@@ -168,6 +207,8 @@ public class VideoEncoderModule: Module {
         writer.cancelWriting()
         throw failure
       }
+
+      reportProgress(processedFrames: i + 1)
     }
 
     guard appendedFrames > 0 else {

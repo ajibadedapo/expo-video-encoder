@@ -72,3 +72,28 @@ test('Android removes the partial MP4 when encoding fails, matching iOS for NO_R
 test('Android drains encoder output while waiting for an input buffer so a full encoder cannot stall', () => {
   assert.match(kotlin, /while \(inIndex < 0\) \{\s*drain\(false\)/);
 });
+
+test('both native encoders declare and send the onEncodeProgress event with the fields the JavaScript layer reads', () => {
+  const indexSource = read('src/index.ts');
+  assert.match(indexSource, /const encodeProgressEvent = 'onEncodeProgress'/);
+  assert.match(swift, /static let encodeProgressEvent = "onEncodeProgress"/);
+  assert.match(swift, /Events\(VideoEncoderModule\.encodeProgressEvent\)/);
+  assert.match(kotlin, /const val ENCODE_PROGRESS_EVENT = "onEncodeProgress"/);
+  assert.match(kotlin, /Events\(ENCODE_PROGRESS_EVENT\)/);
+  for (const field of ['progressId', 'processedFrames', 'encodedFrames', 'frameCount']) {
+    assert.match(swift, new RegExp(`"${field}":`), `Swift event is missing ${field}`);
+    assert.match(kotlin, new RegExp(`"${field}" to`), `Kotlin event is missing ${field}`);
+    assert.match(indexSource, new RegExp(`${field}\\?: unknown`), `NativeEncodeProgressEvent is missing ${field}`);
+  }
+  assert.match(swift, /options\["progressId"\] as\? String/);
+  assert.match(kotlin, /options\["progressId"\] as\? String/);
+});
+
+test('both native encoders report progress for skipped frames too, at most once per percent plus the last frame', () => {
+  assert.equal([...swift.matchAll(/reportProgress\(processedFrames: i \+ 1\)/g)].length, 2);
+  assert.equal([...kotlin.matchAll(/reportProgress\(i \+ 1\)/g)].length, 2);
+  assert.match(swift, /guard percent != lastReportedPercent \|\| processedFrames == frameCount else \{ return \}/);
+  assert.match(kotlin, /if \(percent == lastReportedPercent && processedFrames != frameCount\) return/);
+  assert.match(swift, /processedFrames \* 100 \/ max\(frameCount, 1\)/);
+  assert.match(kotlin, /processedFrames \* 100 \/ frameCount\.coerceAtLeast\(1\)/);
+});
