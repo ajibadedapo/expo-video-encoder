@@ -7,6 +7,11 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.1] - 2026-10-01
+
+### Fixed
+- The npm package no longer ships local native build output. 1.1.0 accidentally included about 115 files from `android/build/` (Gradle and Kotlin caches and compiled classes), which could confuse the Android build in apps that install it. The package is back to 22 runtime files, and the package check now fails if native build output, Gradle caches or `.class` files are ever included.
+
 ## [1.1.0] - 2026-09-27
 
 ### Added
