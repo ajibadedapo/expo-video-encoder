@@ -349,8 +349,8 @@ Behaviour:
 - Frames are read as `framesDir/frame_000000.jpg` up to `frame_{frameCount - 1}` (six digit zero padding). Use `frameFileName(i)` or `frameFilePath(dir, i)` to produce those names.
 - Frame `i` is shown at `i / fps` seconds. Missing or unreadable frames are skipped without an error, but at least one readable frame is required, otherwise the promise rejects with `NO_READABLE_FRAMES`. A skipped frame is not replaced: the other frames keep their `i / fps` timestamps, and missing frames at the end make the video shorter. Run `findMissingFrames` first if a partial capture should fail the export (see [Checking frames before encoding](#checking-frames-before-encoding)).
 - Each frame is scaled to `width` x `height`. Aspect ratio is not preserved, so capture frames at the output size or the same aspect ratio.
-- An existing file at `outputPath` is replaced, and missing parent folders of `outputPath` are created.
-- Fractional `fps` such as `29.97` is kept on both platforms. iOS places frames on a 90 kHz clock and Android uses microsecond timestamps, so 60 frames at `29.97` last 2.002 seconds on either.
+- An existing file at `outputPath` is replaced, and missing parent folders of `outputPath` are created. On Android, a failed encode deletes the partial file at `outputPath`.
+- Fractional `fps` such as `29.97` is kept on both platforms. iOS places frames on a 90 kHz clock and Android rounds `i / fps` to the nearest microsecond, so 60 frames at `29.97` last 2.002 seconds on either.
 
 ### `mixAudio(options: MixAudioOptions): Promise<boolean>`
 
@@ -426,7 +426,7 @@ Failures inside the native modules are also rejected as `ExpoVideoEncoderError`,
 | `code` | When |
 |--------|------|
 | `NO_READABLE_FRAMES` | `encodeVideo` found none of the `frameCount` frame files, or none decoded as JPEG. No output file is left behind. |
-| `WRITER_FAILED` | iOS only. `AVAssetWriter` could not be created, refused the H.264 settings, failed to start, stopped during encoding (for example when the disk is full), or could not finish the file. The message includes the reason `AVAssetWriter` gave. |
+| `WRITER_FAILED` | The MP4 could not be written. On iOS, `AVAssetWriter` could not be created, refused the H.264 settings, failed to start, stopped during encoding (for example when the disk is full), or could not finish the file, and the message includes the reason `AVAssetWriter` gave. On Android, `MediaMuxer` could not open `outputPath`, add the video track, write a frame, or finish the file, or the encoder produced no frames; the message names the step that failed. |
 | `ENCODE_ERROR` | Any other encoding failure, for example an Android `MediaCodec` error or an existing `outputPath` that could not be replaced. |
 | `MIX_ERROR` | iOS audio mixing failed, for example the video has no video track or the export failed. |
 | `MIX_UNSUPPORTED` | The Android native module was called for `mixAudio` directly. The JavaScript API rejects with `UNSUPPORTED_PLATFORM` first. |

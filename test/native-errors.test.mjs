@@ -42,3 +42,33 @@ test('iOS encoding checks the writer status instead of waiting forever or ignori
   assert.match(swift, /if writer\.status != \.writing/);
   assert.match(swift, /guard writer\.status == \.completed else/);
 });
+
+test('Android frame timestamps round i / fps in microseconds instead of multiplying a truncated frame duration', () => {
+  assert.doesNotMatch(kotlin, /frameDurationUs/);
+  assert.match(kotlin, /Math\.round\(frameIndex \* 1_000_000\.0 \/ fps\)/);
+  assert.match(kotlin, /presentationTimeUs\(i, fps\)/);
+  assert.match(kotlin, /presentationTimeUs\(lastFrameIndex \+ 1, fps\)/);
+});
+
+test('Android bit rate keeps fractional fps and cannot overflow Int at large sizes', () => {
+  assert.doesNotMatch(kotlin, /fps\.toInt\(\)/);
+  assert.match(kotlin, /width\.toDouble\(\) \* height \* fps \/ 8\)\.coerceIn\(1\.0, Int\.MAX_VALUE\.toDouble\(\)\)/);
+  const intMax = 2 ** 31 - 1;
+  assert.ok(8192 * 8192 * 240 > intMax, 'the old Int product overflowed before dividing by 8');
+  assert.ok((8192 * 8192 * 240) / 8 <= intMax, 'the Double result fits at the largest size validation allows');
+});
+
+test('Android reports MediaMuxer failures as WRITER_FAILED and no longer ignores a failed muxer.stop()', () => {
+  assert.match(kotlin, /catch \(error: MuxerFailureException\) \{\s*promise\.reject\("WRITER_FAILED"/);
+  assert.match(kotlin, /muxerStep\("Could not create the MP4 muxer"\)/);
+  assert.match(kotlin, /muxerStep\("Could not finish the MP4"\) \{ muxer\.stop\(\) \}/);
+  assert.match(kotlin, /muxerStep\("Could not write an encoded frame to the MP4"\)/);
+});
+
+test('Android removes the partial MP4 when encoding fails, matching iOS for NO_READABLE_FRAMES', () => {
+  assert.match(kotlin, /if \(!finished\) outFile\.delete\(\)/);
+});
+
+test('Android drains encoder output while waiting for an input buffer so a full encoder cannot stall', () => {
+  assert.match(kotlin, /while \(inIndex < 0\) \{\s*drain\(false\)/);
+});

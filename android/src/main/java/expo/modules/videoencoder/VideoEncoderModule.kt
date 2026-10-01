@@ -14,6 +14,21 @@ import java.io.File
 
 class NoReadableFramesException(message: String) : Exception(message)
 
+class MuxerFailureException(message: String, cause: Throwable?) : Exception(message, cause)
+
+internal fun presentationTimeUs(frameIndex: Int, fps: Double): Long =
+  Math.round(frameIndex * 1_000_000.0 / fps)
+
+internal fun bitRateFor(width: Int, height: Int, fps: Double): Int =
+  (width.toDouble() * height * fps / 8).coerceIn(1.0, Int.MAX_VALUE.toDouble()).toInt()
+
+internal inline fun <T> muxerStep(step: String, block: () -> T): T =
+  try {
+    block()
+  } catch (error: Exception) {
+    throw MuxerFailureException("$step: ${error.message ?: error.javaClass.simpleName}", error)
+  }
+
 class VideoEncoderModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("VideoEncoder")
@@ -36,6 +51,8 @@ class VideoEncoderModule : Module() {
         promise.resolve(true)
       } catch (error: NoReadableFramesException) {
         promise.reject("NO_READABLE_FRAMES", error.message ?: "No readable frame files were found", error)
+      } catch (error: MuxerFailureException) {
+        promise.reject("WRITER_FAILED", error.message ?: "MediaMuxer failed", error)
       } catch (error: Exception) {
         promise.reject("ENCODE_ERROR", error.message ?: "Encode failed", error)
       }
@@ -59,27 +76,53 @@ class VideoEncoderModule : Module() {
     outputPath: String
   ) {
     val outFile = File(outputPath)
-    if (outFile.exists()) outFile.delete()
+    if (outFile.exists() && !outFile.delete()) {
+      throw IllegalStateException("Could not replace the existing file at $outputPath")
+    }
     outFile.parentFile?.mkdirs()
 
+    var finished = false
+    try {
+      writeFrames(framesDir, frameCount, fps, width, height, outputPath)
+      finished = true
+    } finally {
+      if (!finished) outFile.delete()
+    }
+  }
+
+  private fun writeFrames(
+    framesDir: String,
+    frameCount: Int,
+    fps: Double,
+    width: Int,
+    height: Int,
+    outputPath: String
+  ) {
     val mime = MediaFormat.MIMETYPE_VIDEO_AVC
-    val codec = MediaCodec.createEncoderByType(mime)
     val format = MediaFormat.createVideoFormat(mime, width, height).apply {
       setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
-      setInteger(MediaFormat.KEY_BIT_RATE, width * height * fps.toInt() / 8)
-      setInteger(MediaFormat.KEY_FRAME_RATE, fps.toInt().coerceAtLeast(1))
+      setInteger(MediaFormat.KEY_BIT_RATE, bitRateFor(width, height, fps))
+      setInteger(MediaFormat.KEY_FRAME_RATE, Math.round(fps).toInt().coerceAtLeast(1))
       setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
     }
 
-    codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-    codec.start()
+    val muxer = muxerStep("Could not create the MP4 muxer") {
+      MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+    }
+    val codec = try {
+      MediaCodec.createEncoderByType(mime)
+    } catch (error: Exception) {
+      muxer.release()
+      throw error
+    }
 
-    val muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+    var codecStarted = false
     var trackIndex = -1
     var muxerStarted = false
+    var samplesWritten = 0
     val bufferInfo = MediaCodec.BufferInfo()
-    val frameDurationUs = (1_000_000.0 / fps).toLong().coerceAtLeast(1L)
     var appended = 0
+    var lastFrameIndex = -1
 
     fun drain(endOfStream: Boolean) {
       while (true) {
@@ -90,8 +133,9 @@ class VideoEncoderModule : Module() {
           }
           outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
             if (muxerStarted) throw IllegalStateException("Output format changed more than once")
-            trackIndex = muxer.addTrack(codec.outputFormat)
-            muxer.start()
+            val outputFormat = codec.outputFormat
+            trackIndex = muxerStep("Could not add the H.264 track to the MP4") { muxer.addTrack(outputFormat) }
+            muxerStep("Could not start the MP4 muxer") { muxer.start() }
             muxerStarted = true
           }
           outIndex >= 0 -> {
@@ -104,7 +148,10 @@ class VideoEncoderModule : Module() {
               if (!muxerStarted) throw IllegalStateException("Muxer was not started before sample data")
               encoded.position(bufferInfo.offset)
               encoded.limit(bufferInfo.offset + bufferInfo.size)
-              muxer.writeSampleData(trackIndex, encoded, bufferInfo)
+              muxerStep("Could not write an encoded frame to the MP4") {
+                muxer.writeSampleData(trackIndex, encoded, bufferInfo)
+              }
+              samplesWritten += 1
             }
             codec.releaseOutputBuffer(outIndex, false)
             if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
@@ -113,7 +160,20 @@ class VideoEncoderModule : Module() {
       }
     }
 
+    fun nextInputBuffer(): Int {
+      var inIndex = codec.dequeueInputBuffer(10_000)
+      while (inIndex < 0) {
+        drain(false)
+        inIndex = codec.dequeueInputBuffer(10_000)
+      }
+      return inIndex
+    }
+
     try {
+      codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+      codec.start()
+      codecStarted = true
+
       for (i in 0 until frameCount) {
         val framePath = File(framesDir, String.format("frame_%06d.jpg", i))
         if (!framePath.exists()) continue
@@ -124,30 +184,34 @@ class VideoEncoderModule : Module() {
           decoded
         }
 
-        var inIndex = codec.dequeueInputBuffer(10_000)
-        while (inIndex < 0) inIndex = codec.dequeueInputBuffer(10_000)
-
+        val inIndex = nextInputBuffer()
         val image = codec.getInputImage(inIndex)
           ?: throw IllegalStateException("Encoder returned a null input image")
         fillImageFromBitmap(image, bitmap, width, height)
 
-        codec.queueInputBuffer(inIndex, 0, width * height * 3 / 2, i * frameDurationUs, 0)
+        codec.queueInputBuffer(inIndex, 0, width * height * 3 / 2, presentationTimeUs(i, fps), 0)
 
         if (bitmap !== decoded) bitmap.recycle()
         decoded.recycle()
 
         appended += 1
+        lastFrameIndex = i
         drain(false)
       }
 
       if (appended == 0) throw NoReadableFramesException("None of the $frameCount frame files in $framesDir could be read as JPEG")
 
-      var eosIndex = codec.dequeueInputBuffer(10_000)
-      while (eosIndex < 0) eosIndex = codec.dequeueInputBuffer(10_000)
-      codec.queueInputBuffer(eosIndex, 0, 0, appended * frameDurationUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+      val eosIndex = nextInputBuffer()
+      codec.queueInputBuffer(eosIndex, 0, 0, presentationTimeUs(lastFrameIndex + 1, fps), MediaCodec.BUFFER_FLAG_END_OF_STREAM)
       drain(true)
+
+      if (!muxerStarted || samplesWritten == 0) {
+        throw MuxerFailureException("The encoder produced no frames for the MP4", null)
+      }
+      muxerStarted = false
+      muxerStep("Could not finish the MP4") { muxer.stop() }
     } finally {
-      runCatching { codec.stop() }
+      if (codecStarted) runCatching { codec.stop() }
       codec.release()
       if (muxerStarted) runCatching { muxer.stop() }
       muxer.release()
