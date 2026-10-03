@@ -4,6 +4,9 @@ import UIKit
 import CoreVideo
 
 public class VideoEncoderModule: Module {
+  private let cancelLock = NSLock()
+  private var cancelledEncodes = Set<String>()
+
   public func definition() -> ModuleDefinition {
     Name("VideoEncoder")
 
@@ -26,8 +29,14 @@ public class VideoEncoderModule: Module {
         progressId: options["progressId"] as? String,
         frameCount: frameCount
       )
+      let cancelId = options["cancelId"] as? String
+      let isCancelled: () -> Bool = { [weak self] in
+        guard let cancelId = cancelId, let self = self else { return false }
+        return self.isCancelRequested(cancelId)
+      }
 
       DispatchQueue.global(qos: .userInitiated).async {
+        defer { self.forgetCancel(cancelId) }
         do {
           try VideoEncoderModule.encodeFrames(
             framesDir:  framesDir,
@@ -36,7 +45,8 @@ public class VideoEncoderModule: Module {
             width:      width,
             height:     height,
             outputPath: outputPath,
-            onProgress: onProgress
+            onProgress: onProgress,
+            isCancelled: isCancelled
           )
           promise.resolve(true)
         } catch let failure as EncodeFailure {
@@ -45,6 +55,10 @@ public class VideoEncoderModule: Module {
           promise.reject("ENCODE_ERROR", error.localizedDescription)
         }
       }
+    }
+
+    Function("cancelEncode") { (cancelId: String) in
+      self.requestCancel(cancelId)
     }
 
     AsyncFunction("mixAudio") { (options: [String: Any], promise: Promise) in
@@ -74,6 +88,25 @@ public class VideoEncoderModule: Module {
   }
 
   // MARK: - Frame encoding
+
+  private func requestCancel(_ cancelId: String) {
+    cancelLock.lock()
+    defer { cancelLock.unlock() }
+    cancelledEncodes.insert(cancelId)
+  }
+
+  private func isCancelRequested(_ cancelId: String) -> Bool {
+    cancelLock.lock()
+    defer { cancelLock.unlock() }
+    return cancelledEncodes.contains(cancelId)
+  }
+
+  private func forgetCancel(_ cancelId: String?) {
+    guard let cancelId = cancelId else { return }
+    cancelLock.lock()
+    defer { cancelLock.unlock() }
+    cancelledEncodes.remove(cancelId)
+  }
 
   private func progressReporter(progressId: String?, frameCount: Int) -> ((Int, Int) -> Void)? {
     guard let progressId = progressId else { return nil }
@@ -116,9 +149,18 @@ public class VideoEncoderModule: Module {
     width:      Int,
     height:     Int,
     outputPath: String,
-    onProgress: ((Int, Int) -> Void)?
+    onProgress: ((Int, Int) -> Void)?,
+    isCancelled: () -> Bool
   ) throws {
     let outputURL = URL(fileURLWithPath: outputPath)
+    let cancelled = EncodeFailure(code: "ENCODE_CANCELLED", message: "Encoding was cancelled")
+
+    func throwIfCancelled() throws {
+      guard isCancelled() else { return }
+      throw cancelled
+    }
+
+    try throwIfCancelled()
 
     if FileManager.default.fileExists(atPath: outputPath) {
       try FileManager.default.removeItem(at: outputURL)
@@ -168,6 +210,13 @@ public class VideoEncoderModule: Module {
     }
     writer.startSession(atSourceTime: .zero)
 
+    func stopIfCancelled() throws {
+      guard isCancelled() else { return }
+      writer.cancelWriting()
+      try? FileManager.default.removeItem(at: outputURL)
+      throw cancelled
+    }
+
     var appendedFrames = 0
     var lastReportedPercent = -1
 
@@ -180,6 +229,7 @@ public class VideoEncoderModule: Module {
     }
 
     for i in 0..<frameCount {
+      try stopIfCancelled()
       let frameName = String(format: "frame_%06d.jpg", i)
       let framePath = (framesDir as NSString).appendingPathComponent(frameName)
 
@@ -192,6 +242,7 @@ public class VideoEncoderModule: Module {
       }
 
       while !input.isReadyForMoreMediaData {
+        try stopIfCancelled()
         if writer.status != .writing {
           let failure = EncodeFailure.writer("Writer stopped before frame \(i)", writer)
           writer.cancelWriting()
@@ -220,6 +271,7 @@ public class VideoEncoderModule: Module {
       )
     }
 
+    try stopIfCancelled()
     input.markAsFinished()
 
     let sema = DispatchSemaphore(value: 0)

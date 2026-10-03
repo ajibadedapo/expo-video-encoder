@@ -7,6 +7,17 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.0] - 2026-10-03
+
+### Added
+- Encode cancellation. `encodeVideo(options, { signal })` takes an `AbortSignal`, such as one from React Native's built in `AbortController`. Calling `abort()` asks the native encoder for that call to stop; it checks before touching `outputPath`, before every frame, and before finishing the MP4 (on iOS also while waiting for the writer), then deletes the partial file and rejects with the new `ENCODE_CANCELLED` code. A signal that is already aborted rejects with `ENCODE_CANCELLED` before any native work, with `signal.reason` as `cause`. Each call has its own job id, so aborting one encode leaves concurrent encodes running, and the abort listener is removed when the promise settles. Both native modules expose `cancelEncode` as a synchronous function, because on Android an async call would wait in the Expo module queue behind the running encode. A `signal` that is not an `AbortSignal` rejects with `INVALID_ARGUMENT`. The `EncodeAbortSignal` type is exported and `ENCODE_CANCELLED` is part of `ExpoVideoEncoderNativeErrorCode`.
+
+### Notes
+- With newer JavaScript on a native build older than 1.2.0 (for example after an over the air update), an abort during the encode is ignored and the encode runs to the end.
+- The iOS encoder was run on the iOS 18.3 simulator with 60 test frames at 320x240: with no abort it wrote a 2 second MP4; aborting before the start, after 19 frames, or after the last frame rejected with `ENCODE_CANCELLED` and left no file, and aborting before the start left an existing file at `outputPath` untouched. The Kotlin module compiles with Kotlin 2.1.20 against Android API 34 and minimal stand-ins for the Expo Modules API, but Android cancellation has not been run on an emulator or device yet. The JavaScript layer is covered by tests with the native module stubbed.
+
+---
+
 ## [1.1.1] - 2026-10-01
 
 ### Fixed

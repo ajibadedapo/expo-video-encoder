@@ -10,6 +10,8 @@ const requireNativeModuleCalls = [];
 let nativeResult = true;
 let nativeError = null;
 let nativeEventsDuringEncode = [];
+let nativeEncodeImpl = null;
+const cancelCalls = [];
 const listeners = new Set();
 
 const emitNative = (eventName, event) => {
@@ -29,8 +31,12 @@ const fakeNativeModule = {
     for (const event of nativeEventsDuringEncode) {
       emitNative('onEncodeProgress', typeof event === 'function' ? event(options) : event);
     }
+    if (nativeEncodeImpl) return nativeEncodeImpl(options);
     if (nativeError) throw nativeError;
     return nativeResult;
+  },
+  cancelEncode: (cancelId) => {
+    cancelCalls.push(cancelId);
   },
   mixAudio: async (options) => {
     nativeCalls.push(['mixAudio', options]);
@@ -79,6 +85,8 @@ beforeEach(() => {
   nativeResult = true;
   nativeError = null;
   nativeEventsDuringEncode = [];
+  nativeEncodeImpl = null;
+  cancelCalls.length = 0;
   listeners.clear();
 });
 
@@ -291,4 +299,159 @@ test('invalid progress options reject as INVALID_ARGUMENT before native work', a
 test('invalid encode options reject before a progress listener is added', async () => {
   await assert.rejects(encoder.encodeVideo({ ...validEncodeOptions(), fps: 0 }, { onProgress: () => {} }), /fps/);
   assert.equal(listeners.size, 0);
+});
+
+const cancelledByNative = () => Object.assign(new Error('Encoding was cancelled'), { code: 'ENCODE_CANCELLED' });
+
+const pendingNativeEncode = () => {
+  let settle;
+  nativeEncodeImpl = (options) =>
+    new Promise((resolve, reject) => {
+      settle = { resolve, reject, options };
+    });
+  return () => settle;
+};
+
+const trackedSignal = (controller) => {
+  const added = [];
+  const removed = [];
+  const { signal } = controller;
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  signal.addEventListener = (type, listener, options) => {
+    added.push(type);
+    add(type, listener, options);
+  };
+  signal.removeEventListener = (type, listener, options) => {
+    removed.push(type);
+    remove(type, listener, options);
+  };
+  return { signal, added, removed };
+};
+
+test('encodeVideo with an already aborted signal rejects as ENCODE_CANCELLED without native work', async () => {
+  const controller = new AbortController();
+  const reason = new Error('user left the screen');
+  controller.abort(reason);
+  await assert.rejects(encoder.encodeVideo(validEncodeOptions(), { signal: controller.signal }), (error) => {
+    assert.ok(encoder.isExpoVideoEncoderError(error, 'ENCODE_CANCELLED'));
+    assert.equal(error.cause, reason);
+    return true;
+  });
+  assert.deepEqual(nativeCalls, []);
+  assert.deepEqual(cancelCalls, []);
+  assert.equal(listeners.size, 0);
+});
+
+test('aborting during an encode asks the native encoder to cancel that job and rejects with its typed error', async () => {
+  const native = pendingNativeEncode();
+  const controller = new AbortController();
+  const tracked = trackedSignal(controller);
+  const encoding = encoder.encodeVideo(validEncodeOptions(), { signal: tracked.signal });
+  await Promise.resolve();
+  const { options, reject } = native();
+  assert.match(options.cancelId, /^encode-\d+$/);
+  assert.equal(options.progressId, undefined);
+  controller.abort();
+  assert.deepEqual(cancelCalls, [options.cancelId]);
+  reject(cancelledByNative());
+  await assert.rejects(encoding, (error) => encoder.isExpoVideoEncoderError(error, 'ENCODE_CANCELLED'));
+  assert.deepEqual(tracked.added, ['abort']);
+  assert.deepEqual(tracked.removed, ['abort']);
+});
+
+test('an encode that finishes before abort resolves normally and a later abort does nothing', async () => {
+  const controller = new AbortController();
+  const tracked = trackedSignal(controller);
+  assert.equal(await encoder.encodeVideo(validEncodeOptions(), { signal: tracked.signal }), true);
+  const [[, sentOptions]] = nativeCalls;
+  assert.match(sentOptions.cancelId, /^encode-\d+$/);
+  assert.deepEqual(tracked.removed, ['abort']);
+  controller.abort();
+  assert.deepEqual(cancelCalls, []);
+});
+
+test('progress and cancellation for one call share the same job id', async () => {
+  const native = pendingNativeEncode();
+  const controller = new AbortController();
+  const encoding = encoder.encodeVideo(validEncodeOptions(), { signal: controller.signal, onProgress: () => {} });
+  await Promise.resolve();
+  const { options, resolve } = native();
+  assert.equal(options.cancelId, options.progressId);
+  resolve(true);
+  assert.equal(await encoding, true);
+  assert.equal(listeners.size, 0);
+});
+
+test('concurrent encodes cancel only the job whose signal aborted', async () => {
+  const jobs = [];
+  nativeEncodeImpl = (options) => new Promise((resolve, reject) => jobs.push({ options, resolve, reject }));
+  const first = new AbortController();
+  const second = new AbortController();
+  const a = encoder.encodeVideo(validEncodeOptions(), { signal: first.signal });
+  const b = encoder.encodeVideo({ ...validEncodeOptions(), outputPath: '/tmp/other.mp4' }, { signal: second.signal });
+  await Promise.resolve();
+  assert.equal(jobs.length, 2);
+  assert.notEqual(jobs[0].options.cancelId, jobs[1].options.cancelId);
+  second.abort();
+  assert.deepEqual(cancelCalls, [jobs[1].options.cancelId]);
+  jobs[0].resolve(true);
+  jobs[1].reject(cancelledByNative());
+  assert.equal(await a, true);
+  await assert.rejects(b, (error) => encoder.isExpoVideoEncoderError(error, 'ENCODE_CANCELLED'));
+});
+
+test('a native build without cancelEncode gets no cancelId and abort leaves the encode running', async () => {
+  const { cancelEncode } = fakeNativeModule;
+  delete fakeNativeModule.cancelEncode;
+  try {
+    const native = pendingNativeEncode();
+    const controller = new AbortController();
+    const encoding = encoder.encodeVideo(validEncodeOptions(), { signal: controller.signal });
+    await Promise.resolve();
+    const { options, resolve } = native();
+    assert.equal(options.cancelId, undefined);
+    controller.abort();
+    resolve(true);
+    assert.equal(await encoding, true);
+  } finally {
+    fakeNativeModule.cancelEncode = cancelEncode;
+  }
+  assert.deepEqual(cancelCalls, []);
+});
+
+test('an error thrown by the native cancelEncode call does not escape the abort handler', async () => {
+  const { cancelEncode } = fakeNativeModule;
+  fakeNativeModule.cancelEncode = () => {
+    throw new Error('native module gone');
+  };
+  try {
+    const native = pendingNativeEncode();
+    const controller = new AbortController();
+    const encoding = encoder.encodeVideo(validEncodeOptions(), { signal: controller.signal });
+    await Promise.resolve();
+    assert.doesNotThrow(() => controller.abort());
+    native().resolve(true);
+    assert.equal(await encoding, true);
+  } finally {
+    fakeNativeModule.cancelEncode = cancelEncode;
+  }
+});
+
+test('a signal that is not an AbortSignal rejects as INVALID_ARGUMENT before native work', async () => {
+  for (const signal of [null, true, {}, { aborted: false }, { aborted: 'no', addEventListener() {}, removeEventListener() {} }]) {
+    await assert.rejects(encoder.encodeVideo(validEncodeOptions(), { signal }), (error) => {
+      assert.ok(encoder.isExpoVideoEncoderError(error, 'INVALID_ARGUMENT'), JSON.stringify(signal));
+      return true;
+    });
+  }
+  assert.deepEqual(nativeCalls, []);
+});
+
+test('invalid encode options are reported before an aborted signal', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(encoder.encodeVideo({ ...validEncodeOptions(), width: 3 }, { signal: controller.signal }), (error) =>
+    encoder.isExpoVideoEncoderError(error, 'INVALID_OPTIONS'),
+  );
 });

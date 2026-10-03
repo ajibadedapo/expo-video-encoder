@@ -11,10 +11,17 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class NoReadableFramesException(message: String) : Exception(message)
 
 class MuxerFailureException(message: String, cause: Throwable?) : Exception(message, cause)
+
+class EncodeCancelledException : Exception("Encoding was cancelled")
+
+internal fun throwIfCancelled(isCancelled: () -> Boolean) {
+  if (isCancelled()) throw EncodeCancelledException()
+}
 
 internal fun presentationTimeUs(frameIndex: Int, fps: Double): Long =
   Math.round(frameIndex * 1_000_000.0 / fps)
@@ -35,6 +42,8 @@ internal inline fun <T> muxerStep(step: String, block: () -> T): T =
   }
 
 class VideoEncoderModule : Module() {
+  private val cancelledEncodes: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
   override fun definition() = ModuleDefinition {
     Name("VideoEncoder")
 
@@ -54,17 +63,27 @@ class VideoEncoderModule : Module() {
       }
 
       val onProgress = progressReporter(options["progressId"] as? String, frameCount)
+      val cancelId = options["cancelId"] as? String
+      val isCancelled = { cancelId != null && cancelledEncodes.contains(cancelId) }
 
       try {
-        encodeFrames(framesDir, frameCount, fps, width, height, outputPath, onProgress)
+        encodeFrames(framesDir, frameCount, fps, width, height, outputPath, onProgress, isCancelled)
         promise.resolve(true)
+      } catch (error: EncodeCancelledException) {
+        promise.reject("ENCODE_CANCELLED", error.message ?: "Encoding was cancelled", error)
       } catch (error: NoReadableFramesException) {
         promise.reject("NO_READABLE_FRAMES", error.message ?: "No readable frame files were found", error)
       } catch (error: MuxerFailureException) {
         promise.reject("WRITER_FAILED", error.message ?: "MediaMuxer failed", error)
       } catch (error: Exception) {
         promise.reject("ENCODE_ERROR", error.message ?: "Encode failed", error)
+      } finally {
+        if (cancelId != null) cancelledEncodes.remove(cancelId)
       }
+    }
+
+    Function("cancelEncode") { cancelId: String ->
+      cancelledEncodes.add(cancelId)
     }
 
     AsyncFunction("mixAudio") { _: Map<String, Any?>, promise: Promise ->
@@ -98,8 +117,10 @@ class VideoEncoderModule : Module() {
     width: Int,
     height: Int,
     outputPath: String,
-    onProgress: ((Int, Int) -> Unit)?
+    onProgress: ((Int, Int) -> Unit)?,
+    isCancelled: () -> Boolean
   ) {
+    throwIfCancelled(isCancelled)
     val outFile = File(outputPath)
     if (outFile.exists() && !outFile.delete()) {
       throw IllegalStateException("Could not replace the existing file at $outputPath")
@@ -108,7 +129,7 @@ class VideoEncoderModule : Module() {
 
     var finished = false
     try {
-      writeFrames(framesDir, frameCount, fps, width, height, outputPath, onProgress)
+      writeFrames(framesDir, frameCount, fps, width, height, outputPath, onProgress, isCancelled)
       finished = true
     } finally {
       if (!finished) outFile.delete()
@@ -122,7 +143,8 @@ class VideoEncoderModule : Module() {
     width: Int,
     height: Int,
     outputPath: String,
-    onProgress: ((Int, Int) -> Unit)?
+    onProgress: ((Int, Int) -> Unit)?,
+    isCancelled: () -> Boolean
   ) {
     val mime = MediaFormat.MIMETYPE_VIDEO_AVC
     val format = MediaFormat.createVideoFormat(mime, width, height).apply {
@@ -210,6 +232,7 @@ class VideoEncoderModule : Module() {
       codecStarted = true
 
       for (i in 0 until frameCount) {
+        throwIfCancelled(isCancelled)
         val framePath = File(framesDir, String.format("frame_%06d.jpg", i))
         val decoded = if (framePath.exists()) BitmapFactory.decodeFile(framePath.absolutePath) else null
         if (decoded == null) {
@@ -240,6 +263,7 @@ class VideoEncoderModule : Module() {
 
       if (appended == 0) throw NoReadableFramesException("None of the $frameCount frame files in $framesDir could be read as JPEG")
 
+      throwIfCancelled(isCancelled)
       val eosIndex = nextInputBuffer()
       codec.queueInputBuffer(eosIndex, 0, 0, presentationTimeUs(lastFrameIndex + 1, fps), MediaCodec.BUFFER_FLAG_END_OF_STREAM)
       drain(true)

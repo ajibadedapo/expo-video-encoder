@@ -39,6 +39,7 @@ Apple ships a fully capable video encoder in every iPhone and iPad called **AVFo
 - **Cross-platform:** frame encoding runs on iOS (AVFoundation) and Android (MediaCodec) behind one API
 - **Frame-by-frame assembly:** snapshot your canvas, Skia surface, or any pixel source
 - **Encode progress:** an optional `onProgress` callback reports how many frames have been processed, on iOS and Android
+- **Cancellation:** pass an `AbortSignal` to stop an encode that is running, on iOS and Android, without leaving a partial MP4 behind
 - **Audio mixing:** place up to 16 non-overlapping audio clips on the timeline, each with its own start time and volume (iOS today, see [Platform support](#platform-support))
 - **Hardware accelerated:** uses the device's built-in video encoder chip on both platforms
 - **Zero external dependencies:** no CocoaPods binary downloads, no xcframework, no surprises
@@ -268,7 +269,7 @@ Everything below is exported from `expo-video-encoder`:
 | `frameFileName`, `frameFilePath`, `toNativePath` | functions | any (pure JavaScript) |
 | `findMissingFrames` | async function | any (you supply the file check) |
 | `ExpoVideoEncoderError`, `isExpoVideoEncoderError` | error class and type guard | any |
-| `EncodeVideoOptions`, `EncodeVideoProgressOptions`, `EncodeProgress`, `MixAudioOptions`, `AudioTrack`, `FrameExistsCheck`, `ExpoVideoEncoderErrorCode`, `ExpoVideoEncoderNativeErrorCode` | types | |
+| `EncodeVideoOptions`, `EncodeVideoProgressOptions`, `EncodeProgress`, `EncodeAbortSignal`, `MixAudioOptions`, `AudioTrack`, `FrameExistsCheck`, `ExpoVideoEncoderErrorCode`, `ExpoVideoEncoderNativeErrorCode` | types | |
 
 ### Types
 
@@ -289,8 +290,16 @@ type EncodeProgress = {
   progress: number;
 };
 
+type EncodeAbortSignal = {
+  readonly aborted: boolean;
+  readonly reason?: unknown;
+  addEventListener: (type: 'abort', listener: () => void) => void;
+  removeEventListener: (type: 'abort', listener: () => void) => void;
+};
+
 type EncodeVideoProgressOptions = {
   onProgress?: (progress: EncodeProgress) => void;
+  signal?: EncodeAbortSignal;
 };
 
 type AudioTrack = {
@@ -312,6 +321,7 @@ type FrameExistsCheck = (path: string, index: number) => boolean | Promise<boole
 type ExpoVideoEncoderNativeErrorCode =
   | 'NO_READABLE_FRAMES'
   | 'WRITER_FAILED'
+  | 'ENCODE_CANCELLED'
   | 'ENCODE_ERROR'
   | 'MIX_ERROR'
   | 'MIX_UNSUPPORTED'
@@ -391,7 +401,34 @@ await encodeVideo(options, {
 - Without `onProgress` nothing changes: no listener is added and the native side sends no events.
 - A second argument that is not an object, or an `onProgress` that is not a function, rejects with `INVALID_ARGUMENT` before any native work.
 - The callback runs on the JavaScript thread. An error it throws is not caught by `encodeVideo`.
-- Progress needs the native code from this version. With newer JavaScript on an older native build (for example an over the air update), `encodeVideo` still works and `onProgress` is simply never called.
+- Progress needs the native code from 1.1.0 or later. With newer JavaScript on an older native build (for example an over the air update), `encodeVideo` still works and `onProgress` is simply never called.
+
+#### Cancelling
+
+Pass an `AbortSignal` as `signal` in the same second argument, and call `abort()` to stop the encode, for example when the user leaves the export screen:
+
+```typescript
+const controller = new AbortController();
+const cancelExport = () => controller.abort();
+
+try {
+  await encodeVideo(options, { signal: controller.signal, onProgress });
+} catch (error) {
+  if (isExpoVideoEncoderError(error, 'ENCODE_CANCELLED')) return;
+  throw error;
+}
+```
+
+Wire `cancelExport` to a cancel button or to the screen's unmount cleanup.
+
+- The native encoder checks for cancellation before it touches `outputPath`, before every frame, and before it finishes the MP4 (on iOS also while it waits for the writer to accept a frame). When it sees the request it stops, deletes the partial file at `outputPath`, and the promise rejects with `ENCODE_CANCELLED`.
+- If the signal is already aborted when `encodeVideo` is called, it rejects with `ENCODE_CANCELLED` before any native work, with `signal.reason` as `cause`. Option errors are reported first.
+- If the abort arrives before the native side started the encode, an existing file at `outputPath` is left as it was. Once the encode has started, the old file has already been replaced, so a cancelled encode leaves no file at `outputPath`.
+- If the abort arrives after the MP4 has been finished, it is too late to cancel and `encodeVideo` resolves `true` as usual.
+- Each call cancels only its own encode, so aborting one of several concurrent encodes leaves the others running.
+- Any object with a boolean `aborted` and `addEventListener` and `removeEventListener` methods is accepted, which covers the `AbortController` built into React Native. Anything else rejects with `INVALID_ARGUMENT` before any native work.
+- Cancellation needs the native code from 1.2.0 or later. With newer JavaScript on an older native build (for example an over the air update), an abort during the encode is ignored and the encode runs to the end. An already aborted signal is still rejected in JavaScript.
+- `mixAudio` cannot be cancelled yet.
 
 ### `mixAudio(options: MixAudioOptions): Promise<boolean>`
 
@@ -459,7 +496,7 @@ Problems this package can detect in JavaScript are thrown (or, from the async fu
 | `code` | When | `field` |
 |--------|------|---------|
 | `INVALID_OPTIONS` | An `encodeVideo` or `mixAudio` option breaks a rule listed above. | The option path, such as `'fps'`, `'outputPath'`, or `'audioTracks[1].volume'`. `undefined` when the options value itself is not an object. |
-| `INVALID_ARGUMENT` | A path or frame helper (including `findMissingFrames`) received a value it cannot use, or the `encodeVideo` progress argument is not `{ onProgress?: function }`. | `undefined` |
+| `INVALID_ARGUMENT` | A path or frame helper (including `findMissingFrames`) received a value it cannot use, or the `encodeVideo` second argument is not `{ onProgress?: function, signal?: AbortSignal }`. | `undefined` |
 | `UNSUPPORTED_PLATFORM` | `encodeVideo` off iOS and Android, or `mixAudio` off iOS. | `undefined` |
 
 Failures inside the native modules are also rejected as `ExpoVideoEncoderError`, with the native code kept as `code` and the original Expo Modules error as `cause`:
@@ -468,6 +505,7 @@ Failures inside the native modules are also rejected as `ExpoVideoEncoderError`,
 |--------|------|
 | `NO_READABLE_FRAMES` | `encodeVideo` found none of the `frameCount` frame files, or none decoded as JPEG. No output file is left behind. |
 | `WRITER_FAILED` | The MP4 could not be written. On iOS, `AVAssetWriter` could not be created, refused the H.264 settings, failed to start, stopped during encoding (for example when the disk is full), or could not finish the file, and the message includes the reason `AVAssetWriter` gave. On Android, `MediaMuxer` could not open `outputPath`, add the video track, write a frame, or finish the file, or the encoder produced no frames; the message names the step that failed. |
+| `ENCODE_CANCELLED` | `encodeVideo` was cancelled through its `signal` (see [Cancelling](#cancelling)). No partial file is left at `outputPath`. |
 | `ENCODE_ERROR` | Any other encoding failure, for example an Android `MediaCodec` error or an existing `outputPath` that could not be replaced. |
 | `MIX_ERROR` | iOS audio mixing failed, for example the video has no video track or the export failed. |
 | `MIX_UNSUPPORTED` | The Android native module was called for `mixAudio` directly. The JavaScript API rejects with `UNSUPPORTED_PLATFORM` first. |
@@ -497,7 +535,7 @@ Error messages are meant for developers and may be reworded in minor releases. M
 
 - Input is JPEG files on disk with the fixed `frame_000000.jpg` naming. There is no in-memory or PNG input.
 - Output is H.264 in MP4 only. The bitrate is derived from `width * height * fps / 8` and cannot be configured yet.
-- There is no cancellation. Progress is reported per frame read (see [Progress](#progress)), not for finishing the MP4 file or for `mixAudio`.
+- Only `encodeVideo` can be cancelled, not `mixAudio`. Progress is reported per frame read (see [Progress](#progress)), not for finishing the MP4 file or for `mixAudio`.
 - Audio mixing is iOS only, and overlapping clips (for example narration over music) are rejected. Mix overlapping audio into one file first.
 - Web and other platforms are not supported.
 - Android encoding has been verified on an emulator (see the 1.1.0 notes in [CHANGELOG.md](./CHANGELOG.md)), not yet on a physical Android device. CI covers the JavaScript layer and package contents, not native builds.
@@ -688,6 +726,7 @@ A bare `uri.replace(/^file:\/\//, '')` strips the prefix but leaves `%20` in pla
 - [x] **Android frame encoding** via `MediaCodec` + `MediaMuxer` (`encodeVideo`)
 - [ ] **Android audio mixing** (`mixAudio`) via `MediaExtractor` + `MediaMuxer`
 - [x] **Progress callbacks:** per-frame encode progress from native to JS (`encodeVideo(options, { onProgress })`)
+- [x] **Cancellation:** stop a running encode with an `AbortSignal` (`encodeVideo(options, { signal })`)
 - [ ] **Quality presets:** CRF control for file size vs. quality tradeoff
 - [ ] **HEVC / H.265:** smaller files at the same quality on iOS 11+
 - [ ] **Frame timestamp control:** variable frame rate support

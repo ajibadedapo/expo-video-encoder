@@ -97,3 +97,32 @@ test('both native encoders report progress for skipped frames too, at most once 
   assert.match(swift, /processedFrames \* 100 \/ max\(frameCount, 1\)/);
   assert.match(kotlin, /processedFrames \* 100 \/ frameCount\.coerceAtLeast\(1\)/);
 });
+
+test('both native modules expose cancelEncode as a synchronous function so it is not queued behind a running encode', () => {
+  assert.match(swift, /Function\("cancelEncode"\) \{ \(cancelId: String\) in/);
+  assert.doesNotMatch(swift, /AsyncFunction\("cancelEncode"\)/);
+  assert.match(kotlin, /Function\("cancelEncode"\) \{ cancelId: String ->/);
+  assert.doesNotMatch(kotlin, /AsyncFunction\("cancelEncode"\)/);
+  assert.match(swift, /options\["cancelId"\] as\? String/);
+  assert.match(kotlin, /options\["cancelId"\] as\? String/);
+  const indexSource = read('src/index.ts');
+  assert.match(indexSource, /cancelEncode\?: \(cancelId: string\) => void/);
+  assert.match(indexSource, /cancelId/);
+});
+
+test('both native encoders check for cancellation before touching the output, for every frame, and before finishing', () => {
+  assert.equal([...swift.matchAll(/try throwIfCancelled\(\)/g)].length, 1);
+  assert.equal([...swift.matchAll(/try stopIfCancelled\(\)/g)].length, 3);
+  assert.equal([...kotlin.matchAll(/throwIfCancelled\(isCancelled\)/g)].length, 3);
+  assert.match(swift, /code: "ENCODE_CANCELLED"/);
+  assert.match(kotlin, /catch \(error: EncodeCancelledException\) \{\s*promise\.reject\("ENCODE_CANCELLED"/);
+});
+
+test('a cancelled iOS encode stops the writer and removes the partial file', () => {
+  assert.match(swift, /writer\.cancelWriting\(\)\s*try\? FileManager\.default\.removeItem\(at: outputURL\)\s*throw cancelled/);
+});
+
+test('both native modules forget a cancelled job id once its encode settles', () => {
+  assert.match(swift, /defer \{ self\.forgetCancel\(cancelId\) \}/);
+  assert.match(kotlin, /finally \{\s*if \(cancelId != null\) cancelledEncodes\.remove\(cancelId\)/);
+});

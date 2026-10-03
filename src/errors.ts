@@ -1,6 +1,7 @@
 export type ExpoVideoEncoderNativeErrorCode =
   | 'NO_READABLE_FRAMES'
   | 'WRITER_FAILED'
+  | 'ENCODE_CANCELLED'
   | 'ENCODE_ERROR'
   | 'MIX_ERROR'
   | 'MIX_UNSUPPORTED'
@@ -15,6 +16,7 @@ export type ExpoVideoEncoderErrorCode =
 const nativeErrorCodes: ReadonlyArray<string> = [
   'NO_READABLE_FRAMES',
   'WRITER_FAILED',
+  'ENCODE_CANCELLED',
   'ENCODE_ERROR',
   'MIX_ERROR',
   'MIX_UNSUPPORTED',

@@ -35,8 +35,16 @@ export type EncodeProgress = {
   progress: number;
 };
 
+export type EncodeAbortSignal = {
+  readonly aborted: boolean;
+  readonly reason?: unknown;
+  addEventListener: (type: 'abort', listener: () => void) => void;
+  removeEventListener: (type: 'abort', listener: () => void) => void;
+};
+
 export type EncodeVideoProgressOptions = {
   onProgress?: (progress: EncodeProgress) => void;
+  signal?: EncodeAbortSignal;
 };
 
 /**
@@ -88,14 +96,17 @@ type NativeEncodeProgressEvent = {
 
 type NativeSubscription = { remove: () => void };
 
+type NativeEncodeOptions = EncodeVideoOptions & { progressId?: string; cancelId?: string };
+
 type NativeVideoEncoder = {
-  encodeVideo: (o: EncodeVideoOptions & { progressId?: string }) => Promise<boolean>;
+  encodeVideo: (o: NativeEncodeOptions) => Promise<boolean>;
+  cancelEncode?: (cancelId: string) => void;
   mixAudio: (o: MixAudioOptions) => Promise<boolean>;
   addListener?: (eventName: string, listener: (event: NativeEncodeProgressEvent) => void) => NativeSubscription;
 };
 
 let _native: NativeVideoEncoder | null = null;
-let nextProgressId = 0;
+let nextJobId = 0;
 const encodeProgressEvent = 'onEncodeProgress';
 
 function getNative(): NativeVideoEncoder {
@@ -108,10 +119,27 @@ function assertProgressOptions(progressOptions: unknown): asserts progressOption
   if (!progressOptions || typeof progressOptions !== 'object') {
     throw new ExpoVideoEncoderError('INVALID_ARGUMENT', 'expo-video-encoder: encodeVideo progress options must be an object.');
   }
-  const { onProgress } = progressOptions as { onProgress?: unknown };
+  const { onProgress, signal } = progressOptions as { onProgress?: unknown; signal?: unknown };
   if (onProgress !== undefined && typeof onProgress !== 'function') {
     throw new ExpoVideoEncoderError('INVALID_ARGUMENT', 'expo-video-encoder: encodeVideo onProgress must be a function.');
   }
+  if (signal !== undefined && !isAbortSignal(signal)) {
+    throw new ExpoVideoEncoderError('INVALID_ARGUMENT', 'expo-video-encoder: encodeVideo signal must be an AbortSignal.');
+  }
+}
+
+function isAbortSignal(value: unknown): value is EncodeAbortSignal {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { aborted?: unknown; addEventListener?: unknown; removeEventListener?: unknown };
+  return (
+    typeof candidate.aborted === 'boolean' &&
+    typeof candidate.addEventListener === 'function' &&
+    typeof candidate.removeEventListener === 'function'
+  );
+}
+
+function cancelledError(cause?: unknown): ExpoVideoEncoderError {
+  return new ExpoVideoEncoderError('ENCODE_CANCELLED', 'expo-video-encoder: encodeVideo was cancelled.', undefined, cause);
 }
 
 function toEncodeProgress(event: NativeEncodeProgressEvent, progressId: string): EncodeProgress | null {
@@ -139,17 +167,29 @@ export async function encodeVideo(options: EncodeVideoOptions, progressOptions?:
   if (!isSupportedPlatform()) unsupported('encodeVideo');
   assertEncodeVideoOptions(options);
   assertProgressOptions(progressOptions);
+  const signal = progressOptions?.signal;
+  if (signal?.aborted) throw cancelledError(signal.reason);
   const native = getNative();
   const onProgress = progressOptions?.onProgress;
+  const jobId = `encode-${++nextJobId}`;
   let subscription: NativeSubscription | null = null;
-  let nativeOptions: EncodeVideoOptions & { progressId?: string } = options;
+  let nativeOptions: NativeEncodeOptions = options;
   if (onProgress && typeof native.addListener === 'function') {
-    const progressId = `encode-${++nextProgressId}`;
-    nativeOptions = { ...options, progressId };
+    nativeOptions = { ...nativeOptions, progressId: jobId };
     subscription = native.addListener(encodeProgressEvent, (event) => {
-      const progress = toEncodeProgress(event, progressId);
+      const progress = toEncodeProgress(event, jobId);
       if (progress) onProgress(progress);
     });
+  }
+  const onAbort = () => {
+    try {
+      native.cancelEncode?.(jobId);
+    } catch {}
+  };
+  const watchAbort = signal !== undefined && typeof native.cancelEncode === 'function';
+  if (watchAbort) {
+    nativeOptions = { ...nativeOptions, cancelId: jobId };
+    signal.addEventListener('abort', onAbort);
   }
   try {
     return await native.encodeVideo(nativeOptions);
@@ -157,6 +197,7 @@ export async function encodeVideo(options: EncodeVideoOptions, progressOptions?:
     throw fromNativeError(error);
   } finally {
     subscription?.remove();
+    if (watchAbort) signal.removeEventListener('abort', onAbort);
   }
 }
 
