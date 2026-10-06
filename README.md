@@ -735,6 +735,21 @@ Want to contribute? Android audio mixing is now the highest-impact next step. Se
 
 ---
 
+## Using with AI coding agents
+
+- [`llms.txt`](https://raw.githubusercontent.com/ajibadedapo/expo-video-encoder/main/llms.txt) and [`llms-full.txt`](https://raw.githubusercontent.com/ajibadedapo/expo-video-encoder/main/llms-full.txt): the full API reference and recipes in plain markdown, for pasting into a prompt or pointing a tool at.
+- [`AGENTS.md`](./AGENTS.md): install, imports, the option vocabulary, recipes and pitfalls.
+- A [Claude Code skill](./skills/expo-video-encoder/SKILL.md). Install it in a project with:
+
+  ```sh
+  mkdir -p .claude/skills/expo-video-encoder
+  curl -fsSL https://raw.githubusercontent.com/ajibadedapo/expo-video-encoder/main/skills/expo-video-encoder/SKILL.md -o .claude/skills/expo-video-encoder/SKILL.md
+  ```
+
+  Or copy `skills/expo-video-encoder` into `~/.claude/skills/` to use it in every project.
+
+---
+
 ## Contributing
 
 Contributions are welcome. Because you cannot push to this repo directly, contributions go through a fork and a pull request, see [CONTRIBUTING.md](./CONTRIBUTING.md) for the step-by-step flow, local setup, and the PR checklist. Android support via `MediaCodec` is the highest-impact place to start.
