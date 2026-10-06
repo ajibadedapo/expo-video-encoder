@@ -2,37 +2,132 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  workflow_dispatch:
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  publish:
+  detect:
+    if: ${{ github.repository == 'ajibadedapo/expo-video-encoder' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Decide whether to publish
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "package.json version $version is not a plain semver version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$(npm view "$name@$version" version 2>/dev/null)" ]; then
+            echo "$name@$version is already on npm, nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ -n "$BEFORE_SHA" ] && ! printf '%s' "$BEFORE_SHA" | grep -Eq '^0+$' && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+              base="$BEFORE_SHA"
+            else
+              base="$(git rev-parse "$HEAD_SHA^")"
+            fi
+            previous="$(git show "$base:package.json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')"
+            if [ "$previous" = "$version" ]; then
+              echo "This push did not change the version ($version), so it is not a release"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "This push changed the version from $previous to $version"
+          else
+            echo "Manual run for $version"
+          fi
+
+          tag_sha="$(git rev-parse -q --verify "refs/tags/v$version^{commit}" || true)"
+          if [ -n "$tag_sha" ] && [ "$tag_sha" != "$HEAD_SHA" ]; then
+            echo "Tag v$version already exists on $tag_sha, not on $HEAD_SHA"
+            exit 1
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: detect
+    if: ${{ needs.detect.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
-      - name: Tag matches package version
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "v$version" ]; then
-            echo "Tag $TAG does not match package.json version $version"
-            exit 1
-          fi
       - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run package:check
-      - run: npm publish --provenance --access public
+      - name: Publish to npm with provenance
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          case "$VERSION" in
+            *-*) npm publish --provenance --access public --tag next ;;
+            *) npm publish --provenance --access public ;;
+          esac
+      - name: Tag the release
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
+            echo "Tag v$VERSION already exists"
+          else
+            git tag "v$VERSION" "$HEAD_SHA"
+            git push origin "refs/tags/v$VERSION"
+          fi
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          awk -v heading="## [$VERSION]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md | sed -e '/^---$/d' > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "See CHANGELOG.md for the changes in $VERSION." > release-notes.md
+          fi
+          if gh release view "v$VERSION" --repo "$REPO" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists"
+          else
+            gh release create "v$VERSION" --repo "$REPO" --verify-tag --title "v$VERSION" --notes-file release-notes.md
+          fi
