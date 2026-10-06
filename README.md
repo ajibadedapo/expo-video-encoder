@@ -206,37 +206,35 @@ async function exportVideo() {
 
 ### With @shopify/react-native-skia
 
+Skia encodes PNG when `encodeToBytes()` or `encodeToBase64()` is called without arguments, so pass `ImageFormat.JPEG` explicitly:
+
 ```typescript
-import { useCanvasRef } from '@shopify/react-native-skia';
+import { ImageFormat, useCanvasRef } from '@shopify/react-native-skia';
+import { File, type Directory } from 'expo-file-system';
+import { frameFileName } from 'expo-video-encoder';
 
 const ref = useCanvasRef();
 
-async function captureFrame(): Promise<string> {
+async function captureFrame(framesDir: Directory, index: number): Promise<void> {
   const image = await ref.current?.makeImageSnapshotAsync();
   if (!image) throw new Error('Snapshot failed');
-  // encodeAsBase64() returns JPEG base64 by default
-  return image.encodeToBase64();
+  new File(framesDir, frameFileName(index)).write(image.encodeToBytes(ImageFormat.JPEG, 90));
 }
 ```
 
 Then in your frame loop:
 
 ```typescript
-import { frameFileName } from 'expo-video-encoder';
-
 for (let i = 0; i < totalFrames; i++) {
   // seek your animation to frame i / fps seconds
   seekTo(i / fps);
   await new Promise(r => requestAnimationFrame(r)); // let Skia render
 
-  const base64 = await captureFrame();
-  await FileSystem.writeAsStringAsync(
-    `${framesDir}${frameFileName(i)}`,
-    base64,
-    { encoding: FileSystem.EncodingType.Base64 }
-  );
+  await captureFrame(framesDir, i);
 }
 ```
+
+If your app writes frames as base64 strings with the legacy `expo-file-system` API (as in the complete export example below), use `image.encodeToBase64(ImageFormat.JPEG, 90)` instead.
 
 ### With expo-gl / WebGL
 
