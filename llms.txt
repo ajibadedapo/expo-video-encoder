@@ -1,0 +1,22 @@
+# expo-video-encoder
+
+> Encode a sequence of JPEG frames on disk into an H.264 MP4 in Expo and React Native, natively with AVFoundation on iOS and MediaCodec plus MediaMuxer on Android, and mix audio clips onto the video on iOS. No FFmpeg, no binaries, no servers. npm package `expo-video-encoder`, MIT licensed.
+
+Install with `npx expo install expo-video-encoder` and make a development build (it has native code, so it does not run in Expo Go). Everything is imported from `expo-video-encoder`. Frames must be named `frame_000000.jpg`, `frame_000001.jpg` and so on (use `frameFileName(i)`), and every path must be a plain absolute native path, so convert `file://` URIs with `toNativePath`.
+
+## Docs
+
+- [Full API reference and recipes](https://raw.githubusercontent.com/ajibadedapo/expo-video-encoder/main/llms-full.txt): every function, option rule, error code and recipe in one plain markdown file
+- [README](https://github.com/ajibadedapo/expo-video-encoder/blob/main/README.md): how the pipeline works, installation, platform support, API reference, troubleshooting
+- [AGENTS.md](https://github.com/ajibadedapo/expo-video-encoder/blob/main/AGENTS.md): how an AI coding agent should use the library, pitfalls, and how to work on the repo
+
+## Recipes
+
+- [Example app pipeline](https://github.com/ajibadedapo/expo-video-encoder/blob/main/example/src/pipeline.ts): write frames with expo-file-system, check them, encode, mix a tone on iOS, fall back to the silent video
+- [Claude Code skill](https://github.com/ajibadedapo/expo-video-encoder/blob/main/skills/expo-video-encoder/SKILL.md): copy into `.claude/skills/expo-video-encoder/` so coding agents use the library correctly
+
+## Optional
+
+- [Changelog](https://github.com/ajibadedapo/expo-video-encoder/blob/main/CHANGELOG.md): release notes per version
+- [Contributing](https://github.com/ajibadedapo/expo-video-encoder/blob/main/CONTRIBUTING.md): development setup, running the example app, Android audio mixing plan
+- [npm package](https://www.npmjs.com/package/expo-video-encoder): versions and provenance
