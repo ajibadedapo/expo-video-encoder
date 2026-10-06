@@ -17,7 +17,8 @@ const pack = spawnSync("npm", ["pack", "--dry-run", "--json"], {
 if (pack.status !== 0) {
   failures.push(`npm pack dry run failed: ${pack.stderr || pack.stdout}`);
 } else {
-  const [entry] = JSON.parse(pack.stdout);
+  const parsed = JSON.parse(pack.stdout);
+  const entry = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
   const files = new Set(entry.files.map((file) => file.path));
   const required = [
     "build/index.d.ts",
